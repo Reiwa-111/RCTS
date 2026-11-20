@@ -1,0 +1,19 @@
+/build/
+/build-*/
+docs/AI_HANDOFF.md
+docs/EXTERNAL_REVIEW_QWEN.md
+docs/QA_REPORT.md
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.partial-*
+*.rct
+*.key
+__pycache__/
+*.py[cod]
+# Public compatibility fixtures are intentionally version-controlled.
+!tests/vectors/hello-world-v0.1.key
+!tests/vectors/hello-world-v0.1.rct
+!tests/vectors/encrypt-hello-world-v0.1.rct
