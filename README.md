@@ -2,37 +2,37 @@
 
 # RCTS
 
-**RCTS** — экспериментальная CLI-утилита на C++20 для потокового шифрования файлов в аутентифицированный контейнер. Формат контейнера RCTS v0.1 использует AES-256-GCM и HKDF-SHA-256 из OpenSSL 3.x. Это исследовательский проект, а не проверенное средство защиты важных данных.
+**RCTS** is an experimental C++20 command-line tool for encrypting files into a chunked authenticated container. Container format RCTS v0.1 uses AES-256-GCM and HKDF-SHA-256 from OpenSSL 3.x. This is a research prototype, not an independently reviewed security product.
 
-| Свойство | Значение |
+| Property | Value |
 |---|---|
-| Версия приложения | `0.3.0` (`VERSION`) |
-| Версия формата | `v0.1` (поле заголовка `1`) |
-| Язык | C++20 |
-| Криптография | OpenSSL 3.x, Crypto |
-| Интерфейс | CLI: `keygen`, `encrypt`, `decrypt` |
-| Обработка данных | Потоковая, блоки до 1 MiB |
-| Платформы разработки | Linux, Windows; тестирование зависит от доступной среды |
-| Статус | Экспериментальный прототип; независимый криптографический аудит не завершён |
+| Application version | `0.3.0` (`VERSION`) |
+| Container format | `v0.1` (header version byte `1`) |
+| Language | C++20 |
+| Crypto dependency | OpenSSL 3.x, Crypto |
+| Interface | CLI: `keygen`, `encrypt`, `decrypt` |
+| Data processing | Streaming, 1 MiB chunks |
+| Development platforms | Linux and Windows; verification depends on available environments |
+| Status | Experimental; independent cryptographic review is incomplete |
 
-> **Предупреждение:** не используй RCTS как единственное средство защиты критически важных, незаменимых или чувствительных данных. Держи резервные копии. Не путай наличие AES-GCM с аудитом всего приложения: криптография не отменяет ошибки реализации, файловой системы, управления ключами и операционной системы.
+> **Warning:** Do not use RCTS as the sole protection for critical, irreplaceable or sensitive data. Keep independent backups. The presence of AES-GCM does not eliminate implementation, filesystem, key-management or operating-system risks.
 
-## Что реализовано
+## Implemented features
 
-- Генерация 32-байтового мастер-ключа через OpenSSL CSPRNG и его Unicode-представление из 32 символов.
-- Вывод отдельного ключа контейнера с HKDF-SHA-256 и случайной 16-байтовой солью.
-- AES-256-GCM с отдельным 16-байтовым тегом для каждой записи.
-- Потоковая обработка файлов с размером блока 1 MiB, без загрузки всего файла в память.
-- AAD связывает заголовок, индекс записи, длину и флаги.
-- Проверка структуры контейнера и аутентификации при расшифровании.
-- Эксклюзивное создание временных файлов, проверка операций записи/синхронизации/закрытия и публикация результата без перезаписи существующего файла.
-- Smoke tests, фиксированный тест-вектор, fault-injection tests и отдельная конфигурация KAT.
+- Generate a 32-byte master key using OpenSSL CSPRNG and encode it as 32 Unicode characters.
+- Derive a container-specific key using HKDF-SHA-256 and a random 16-byte salt.
+- AES-256-GCM with a separate 16-byte authentication tag per record.
+- Stream files in 1 MiB chunks without loading the entire input into memory.
+- Authenticate the header, record index, length and flags as AAD.
+- Validate container framing and authentication during decryption.
+- Exclusively create temporary files, check write/sync/close operations and publish output without replacing existing files.
+- Smoke tests, a fixed compatibility vector, fault-injection tests and a separate KAT configuration.
 
-## Сборка
+## Build
 
-### Linux (GCC или Clang)
+### Linux (GCC or Clang)
 
-Зависимости: C++20-компилятор, CMake 3.20+, OpenSSL 3.x (Crypto), Python 3.8+ для тестов.
+Requirements: C++20 compiler, CMake 3.20+, OpenSSL 3.x Crypto and Python 3.8+ for tests.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -42,7 +42,7 @@ ctest --test-dir build --output-on-failure
 
 ### Windows / MSYS2 UCRT64
 
-Установи UCRT64-компилятор GCC, CMake, OpenSSL и Python из MSYS2. Из UCRT64 shell:
+Install UCRT64 GCC, CMake, OpenSSL and Python packages from MSYS2. In a UCRT64 shell:
 
 ```sh
 cmake -S . -B build -G "MinGW Makefiles" -DOPENSSL_ROOT_DIR="C:/msys64/ucrt64"
@@ -59,12 +59,11 @@ cmake --build build --config Release --parallel
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Путь к OpenSSL зависит от способа установки. Не устанавливай `CMAKE_PREFIX_PATH`, если CMake уже обнаруживает корректную сборку OpenSSL.
+OpenSSL paths depend on the installation method. Do not set `CMAKE_PREFIX_PATH` if CMake already discovers the correct OpenSSL installation.
 
+## Usage
 
-## Использование
-
-Синтаксис команд:
+Commands:
 
 ```text
 rcts keygen <key-file>
@@ -72,7 +71,7 @@ rcts encrypt <key-file> <input-file> <output.rct>
 rcts decrypt <key-file> <input.rct> <output-file>
 ```
 
-Примеры (после сборки бинарник находится в каталоге сборки):
+Examples, after building:
 
 ```sh
 ./build/rcts keygen secret.key
@@ -80,69 +79,72 @@ rcts decrypt <key-file> <input.rct> <output-file>
 ./build/rcts decrypt secret.key archive.rct restored.bin
 ```
 
-Windows: запускай `build\\Release\\rcts.exe` для генератора Visual Studio или соответствующий `rcts.exe` в каталоге MinGW-сборки. Путь к DLL OpenSSL должен быть доступен для запуска.
+On Windows, launch `build\\Release\\rcts.exe` for the Visual Studio generator or the corresponding `rcts.exe` in the MinGW build directory. OpenSSL runtime DLLs must be available.
 
-### Поведение файлов
+### File behavior
 
-- Существующие ключи и выходные файлы не перезаписываются.
-- Ключ и входные данные должны быть обычными файлами; чтение ключа ограничено.
-- При ошибке аутентификации расшифрование должно завершаться неуспешно.
-- Публикация выходного файла производится после завершения записи и проверки финализации.
-- Код возврата: `0` — успех, `1` — ошибка операции, `2` — неверные аргументы.
+- Existing key and output files are not overwritten.
+- Key and input files must be regular files; key reads are bounded.
+- Decryption must fail on authentication errors.
+- Final output is published only after processing and finalization succeed.
+- Exit codes: `0` success, `1` operation failure, `2` invalid arguments.
 
-## Формат и криптография
+## Format and cryptography
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
-| Заголовок | 33 байта, фиксированный |
-| Salt | 16 байт |
-| Nonce | 4-байтовый префикс + 64-битный индекс записи (BE) |
-| Размер блока | 1 MiB |
-| Максимум записей | 65 536 |
-| Максимальный размер открытых данных | 64 GiB |
+| Header | 33 bytes, fixed |
+| Salt | 16 bytes |
+| Nonce | 4-byte prefix + 64-bit record index (BE) |
+| Chunk size | 1 MiB |
+| Maximum records | 65,536 |
+| Maximum plaintext size | 64 GiB |
 | KDF | HKDF-SHA-256 |
-| Шифр | AES-256-GCM |
-| GCM tag | 16 байт на запись |
-| Key encoding | 32 Unicode-кодовые точки `U+4E00..U+4EFF`, UTF-8 |
+| Cipher | AES-256-GCM |
+| GCM tag | 16 bytes per record |
+| Key encoding | 32 Unicode code points `U+4E00..U+4EFF`, UTF-8 |
 
-Спецификация: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md), формат: [`docs/FORMAT.md`](docs/FORMAT.md), ключ: [`docs/KEY_FORMAT.md`](docs/KEY_FORMAT.md).
+See the [specification](docs/eng/reference/specification.md), [container format](docs/eng/reference/container-format.md) and [key format](docs/eng/reference/key-format.md).
 
-## Документация
+## Documentation
 
-- [Архитектура реализации](docs/ARCHITECTURE.md) — реальные компоненты, потоки, файловые операции и границы реализации.
-- [Спецификация](docs/SPECIFICATION.md) — пользовательский контракт приложения и формата.
-- [Бинарный формат](docs/FORMAT.md) — заголовок, записи, nonce, AAD, framing и проверки.
-- [Формат ключа](docs/KEY_FORMAT.md) — генерация, кодирование, чтение и валидация ключа.
-- [Модель безопасности](docs/SECURITY.md) — угрозы, свойства, допущения и ограничения.
-- [Тестирование](docs/TESTING.md) — наборы, команды, покрытие и границы тестов.
-- [Разработка](docs/DEVELOPMENT.md) — сборка, конфигурации и рабочий процесс.
-- [Решения](docs/DECISIONS.md) — ADR с мотивировкой и последствиями.
-- [Roadmap](docs/ROADMAP.md) — этапы и критерии готовности, без обещаний дат.
-- [Changelog](CHANGELOG.md) — пользовательские изменения по версиям.
-- [Статус лицензий](LICENSE_STATUS.md) — лицензии проекта и зависимостей.
+- [Documentation index](docs/README.md) — entry point for the English how-to, reference and explanation sections.
+- [Architecture](docs/eng/explanation/architecture.md) — actual components, encrypt/decrypt paths, file operations and implementation boundaries.
+- [Specification](docs/eng/reference/specification.md) — application and format contract.
+- [Binary format](docs/eng/reference/container-format.md) — header, records, nonce, AAD, framing and validation.
+- [Key format](docs/eng/reference/key-format.md) — generation, encoding, reading and validation.
+- [Security model](docs/eng/explanation/security.md) — threats, assumptions, properties and limitations.
+- [Testing](docs/eng/how-to/testing.md) — suites, commands, coverage and limits.
+- [Development](docs/eng/how-to/development.md) — build configurations and workflow.
+- [Decisions](docs/eng/explanation/decisions.md) — architecture decision records.
+- [Roadmap](docs/eng/explanation/roadmap.md) — milestones and completion criteria, without date promises.
+- [Changelog](CHANGELOG.md) — user-visible changes by version.
+- [License status](LICENSE_STATUS.md) — project and dependency licensing notes.
 
-## Структура репозитория
+## Repository layout
 
 ```text
 RCTS/
-├── src/                 # CLI и основная реализация контейнера
-├── tests/               # smoke, KAT, fault injection, test vectors
-├── docs/                 # публичная техническая документация
-├── build*/               # локальные сборки и результаты (ignored)
-├── CMakeLists.txt         # сборка и тестовые опции
-├── VERSION               # версия приложения
-├── LICENSE               # лицензия проекта
-├── LICENSE_STATUS.md     # обзор лицензий и third-party статуса
-├── SHA256SUMS.txt        # контрольные суммы отслеживаемых файлов
+├── src/                 # CLI and container implementation
+├── tests/               # smoke, KAT, fault injection, fixtures
+├── docs/                 # public documentation, Diataxis-style English tree
+│   ├── README.md         # documentation landing page
+│   └── eng/              # how-to, reference and explanation
+├── build*/               # local build/evidence directories (ignored)
+├── CMakeLists.txt         # build and test configuration
+├── VERSION               # application version
+├── LICENSE               # project license
+├── LICENSE_STATUS.md     # licensing and third-party notes
+├── SHA256SUMS.txt        # checksums for selected tracked files
 └── README.md
 ```
 
-## Тесты и ограничения
+## Testing and limitations
 
-CTest запускает тесты, зарегистрированные в текущей конфигурации CMake. Отдельные конфигурации проверяют Release/Hardened/Analyzer builds, fault injection и криптографический known-answer test. Их результаты следует считать подтверждёнными только при наличии логов конкретного запуска и указании commit/build environment.
+CTest runs the tests registered in the active CMake configuration. Separate configurations cover Release/Hardened/Analyzer builds, fault injection and a cryptographic known-answer test. Results should be considered verified only when logs from the exact source revision and build environment are available.
 
-Текущие ограничения включают отсутствие независимого криптографического аудита, неполную матрицу ОС/компиляторов, ограниченное покрытие редких ошибок файловой системы и отсутствие доказательства безопасного стирания всех копий секретов из памяти. Подробнее — [SECURITY](docs/SECURITY.md) и [ROADMAP](docs/ROADMAP.md).
+Known limitations include the lack of independent cryptographic review, an incomplete OS/compiler matrix, limited coverage of rare filesystem failures and no proof of secure erasure of all secret copies in memory. See [SECURITY](docs/eng/explanation/security.md) and [ROADMAP](docs/eng/explanation/roadmap.md).
 
-## Лицензия
+## License
 
-Код и документация RCTS лицензированы по Apache License 2.0. OpenSSL и прочие внешние компоненты имеют собственные лицензии и условия распространения. См. [`LICENSE`](LICENSE) и [`LICENSE_STATUS.md`](LICENSE_STATUS.md).
+RCTS-authored code and documentation are licensed under Apache License 2.0. OpenSSL and other external components have their own licenses and distribution conditions. See [`LICENSE`](LICENSE) and [`LICENSE_STATUS.md`](LICENSE_STATUS.md).

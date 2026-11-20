@@ -1,18 +1,15 @@
 # last updated: 0.3.0 | 2026-11-20 | DOCUMENTATION LANDING PAGE
 
-# RCTS documentation index
+# RCTS documentation
 
+All published documentation is maintained in English and is organized by purpose, following the Diátaxis model.
 
-| Document | Purpose | Audience |
-|---|---|---|
-| [Architecture](ARCHITECTURE.md) | Implemented components, encryption/decryption paths, I/O and architecture boundaries | Developers/reviewers |
-| [Specification](SPECIFICATION.md) | Application and container contract | Implementers/users |
-| [Format](FORMAT.md) | Header, records, nonce, AAD and parser rules | Format implementers |
-| [Key format](KEY_FORMAT.md) | Generated key encoding and validation | Users/implementers |
-| [Security](SECURITY.md) | Threat model, assumptions, limitations and assurance status | Users/reviewers |
-| [Testing](TESTING.md) | Test scripts, categories, commands and evidence expectations | Developers/QA |
-| [Development](DEVELOPMENT.md) | Build configurations and contributor workflow | Developers |
-| [Decisions](DECISIONS.md) | Architecture decision records | Maintainers |
-| [Roadmap](ROADMAP.md) | Remaining work and milestone exit criteria | Maintainers |
+Start with the [English documentation index](eng/README.md) to choose a guide or technical reference. The repository root [`README.md`](../README.md) remains the project overview and quick-start page.
 
-The README at repository root is the project overview and quick start. `INTERNAL_DOCS/` is a local ignored engineering notebook; it must not be published.
+## Sections
+
+- [How-to guides](eng/how-to/README.md) — practical build, test and development workflows.
+- [Reference](eng/reference/README.md) — stable application, container and key-file contracts.
+- [Explanation](eng/explanation/README.md) — architecture, security model, design decisions and roadmap.
+
+The internal working notes are kept separately in ignored `INTERNAL_DOCS/` and are not part of the public documentation set.

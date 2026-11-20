@@ -54,7 +54,7 @@ The format version byte is `1`. Unknown versions, unsupported header parameters,
 
 ## Related normative documents
 
-- [Container byte layout](FORMAT.md)
-- [Key encoding](KEY_FORMAT.md)
-- [Security assumptions and limitations](SECURITY.md)
-- [Test coverage](TESTING.md)
+- [Container byte layout](container-format.md)
+- [Key encoding](key-format.md)
+- [Security assumptions and limitations](../explanation/security.md)
+- [Test coverage](../how-to/testing.md)
