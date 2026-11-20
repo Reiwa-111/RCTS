@@ -1,10 +1,10 @@
-# last updated: 0.3.0 | 2026-11-20 | ROADMAP REVIEW
+# last updated: 0.3.1 | 2026-11-20 | ROADMAP REVIEW
 
 # RCTS roadmap
 
-Version labels are engineering milestones, not calendar promises. The container format must not change silently: any incompatible revision needs explicit versioning, compatibility policy and migration planning.+
+Version labels are engineering milestones, not calendar promises. The container format must not change silently: any incompatible revision needs explicit versioning, compatibility policy and migration planning.
 
-## Current baseline — application 0.3.0 / format v0.1
+## Current baseline — application 0.3.1 / format v0.3 (legacy read: v0.1)
 
 - [x] CLI: `keygen`, `encrypt`, `decrypt`.
 - [x] 32-byte master key with a 32-character Unicode representation.
@@ -21,10 +21,10 @@ Version labels are engineering milestones, not calendar promises. The container 
 - [ ] Complete cross-platform tests for output-path races and symlink edge cases.
 - [ ] Expand disk-full, short-write, sync, close and publication-failure coverage.
 - [ ] Review cleanup after ordinary errors and abnormal termination.
-- [ ] Define supported OS/compiler/OpenSSL combinations and verify them in CI.
+- [ ] Define supported OS/compiler/OpenSSL combinations and verify them in CI (matrix workflow added; hosted runs pending).
 
 ### Security assurance
-- [ ] Independent review of nonce construction, HKDF parameters, AAD, framing and GCM usage.
+- [ ] Validate received review findings independently, then complete review of nonce construction, HKDF parameters, AAD, framing and GCM usage.
 - [ ] Review secret-bearing buffers, copies, stack lifetime and cleansing claims.
 - [ ] Fuzz the container parser and key decoder.
 - [ ] Add property-based checks for framing, round-trip and failure rejection.
@@ -39,7 +39,7 @@ Version labels are engineering milestones, not calendar promises. The container 
 
 ## Possible later work
 
-Potential features are not committed scope: safer key workflow, an explicit recovery/migration tool, container metadata options and modularization of the current translation unit. Each proposal requires threat-model review and format/API compatibility analysis.
+Potential features are not committed scope: safer key workflow, an explicit recovery/migration tool and container metadata options. Modularization of the current translation unit is active engineering work under RCTS-I007, not deferred scope. Each feature proposal requires threat-model review and format/API compatibility analysis.
 
 ## Exit criteria
 

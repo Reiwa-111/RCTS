@@ -1,8 +1,8 @@
-# last updated: 0.3.0 | 2026-11-20 | REFERENCE INDEX
+# last updated: 0.3.1 | 2026-11-20 | REFERENCE INDEX
 
 # Technical reference
 
-Reference pages define behavior and compatibility contracts for the current implementation.+
+Reference pages define behavior and compatibility contracts for the current implementation.
 
 | Reference | Scope |
 |---|---|

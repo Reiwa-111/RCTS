@@ -1,8 +1,8 @@
-# last updated: 0.3.0 | 2026-11-20 | EXPLANATION INDEX
+# last updated: 0.3.1 | 2026-11-20 | EXPLANATION INDEX
 
 # Explanation and design
 
-These documents explain why the current implementation is shaped as it is, its trust boundaries and the engineering work still required.+
+These documents explain why the current implementation is shaped as it is, its trust boundaries and the engineering work still required.
 
 | Document | Scope |
 |---|---|

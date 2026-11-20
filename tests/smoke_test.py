@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pathlib
 import random
+import re
 import shutil
 import stat
 import subprocess
@@ -16,7 +17,7 @@ HEADER_SIZE = 33
 RECORD_HEADER_SIZE = 5
 TAG_SIZE = 16
 MAGIC = b"RCTS\r\n\x1a\n"
-VERSION = 1
+VERSION = 3
 MAX_RECORDS = 1 << 16
 MAX_PLAINTEXT = CHUNK * MAX_RECORDS
 MIN_CONTAINER = HEADER_SIZE + RECORD_HEADER_SIZE + TAG_SIZE
@@ -54,11 +55,11 @@ def assert_no_partials(root: pathlib.Path, label: str = "") -> None:
     assert not leftovers, f"temporary files were left behind ({label}): {leftovers}"
 
 
-def parse_container(data: bytes) -> list[tuple[int, int]]:
+def parse_container(data: bytes, version: int = VERSION) -> list[tuple[int, int]]:
     """Validate structural invariants and return (plaintext_length, flags) records."""
     assert len(data) >= MIN_CONTAINER
     assert data[:8] == MAGIC, "bad magic"
-    assert data[8] == VERSION, "bad version"
+    assert data[8] == version, "bad version"
     assert int.from_bytes(data[9:13], "big") == CHUNK, "bad chunk size"
 
     records: list[tuple[int, int]] = []
@@ -118,7 +119,7 @@ def windows_dacl_sddl(path: pathlib.Path) -> str | None:
 
 
 def check_private_windows_dacl(path: pathlib.Path) -> None:
-    """Verify the file DACL is protected and does not grant broad principals."""
+    """Verify the DACL is protected and grants only the intended full-access ACEs."""
     sddl = windows_dacl_sddl(path)
     if sddl is None:
         return
@@ -129,8 +130,18 @@ def check_private_windows_dacl(path: pathlib.Path) -> None:
         ("S-1-5-32-545", "Users"),
     ):
         assert sid not in sddl, f"DACL grants {name} on {path}: {sddl}"
-    assert "S-1-5-21-" in sddl or "S-1-5-32-544" in sddl, (
-        f"DACL does not name an owner/administrator SID: {sddl}")
+    owner_match = re.match(r"O:([^G]+)G:", sddl)
+    assert owner_match is not None, f"DACL SDDL lacks a parseable owner: {sddl}"
+    owner_sid = owner_match.group(1)
+    expected_aces = {
+        "A;;FA;;;SY",  # Local SYSTEM
+        "A;;FA;;;BA",  # Local Administrators
+        f"A;;FA;;;{owner_sid}",  # Current user
+    }
+    actual_aces = set(re.findall(r"\(([^()]*)\)", sddl))
+    assert actual_aces == expected_aces, (
+        f"DACL ACE allowlist mismatch for {path}: expected {expected_aces}, "
+        f"got {actual_aces}; SDDL={sddl}")
 
 
 def launch(binary: pathlib.Path, commands: list[list[object]]) -> tuple[list[int], list[str]]:
@@ -228,7 +239,7 @@ def main() -> int:
         assert vector_output.read_bytes() == b"HELLO WORLD"
 
         # The published vector must remain structurally canonical.
-        assert parse_container(vector_container.read_bytes()) == [(11, 1)]
+        assert parse_container(vector_container.read_bytes(), version=1) == [(11, 1)]
 
         key = root / "master.key"
         run(binary, "keygen", key)

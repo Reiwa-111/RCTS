@@ -1,8 +1,8 @@
-# last updated: 0.3.0 | 2026-11-20 | HOW-TO INDEX
+# last updated: 0.3.1 | 2026-11-20 | HOW-TO INDEX
 
 # How-to guides
 
-Use these guides for practical workflows rather than protocol details.+
+Use these guides for practical workflows rather than protocol details.
 
 | Guide | Purpose |
 |---|---|

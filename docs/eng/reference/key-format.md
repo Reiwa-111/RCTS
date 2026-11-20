@@ -1,6 +1,6 @@
-# last updated: 0.3.0 | 2026-11-20 | KEY REFERENCE
+# last updated: 0.3.1 | 2026-11-20 | KEY REFERENCE
 
-# RCTS v0.1 key-file format
+# RCTS v0.3 key-file format (unchanged from v0.1)
 
 
 ## Key material

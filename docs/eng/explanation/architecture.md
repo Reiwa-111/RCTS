@@ -1,10 +1,10 @@
-# last updated: 0.3.0 | 2026-11-20 | IMPLEMENTATION OVERVIEW
+# last updated: 0.3.1 | 2026-11-20 | IMPLEMENTATION OVERVIEW
 
 # RCTS architecture
 
 ## Scope
 
-RCTS is a single-process, user-space command-line application. The current implementation is concentrated in `src/main.cpp`; cryptographic and filesystem helpers have not yet been split into independently maintained modules. CMake builds the application and registers tests. OpenSSL Crypto supplies the cryptographic primitives.+
+RCTS is a single-process, user-space command-line application. Platform argument collection and the entry point live in `src/entry.cpp`; command dispatch is in `src/cli.cpp`; v0.1 framing constants and endian/nonce/AAD helpers are in `src/format.hpp`; secure random generation, HKDF and AES-GCM operations are in `src/crypto.cpp` with a narrow interface in `src/crypto.hpp`; fixed-width key encoding/decoding is in `src/key_codec.cpp` and `src/key_codec.hpp`. File I/O and atomic publication live in `src/file_io.cpp`/`src/file_io.hpp`; encryption/decryption/keygen orchestration lives in `src/operations.cpp`. `src/main.cpp` is now a thin translation unit. The split is incremental; some helpers and interfaces can still be refined. New encryption emits v0.3 and decryption selects the matching HKDF context for v0.1 or v0.3. CMake builds the application and registers tests. OpenSSL Crypto supplies the cryptographic primitives.
 
 ## Data-flow overview
 
@@ -27,7 +27,7 @@ CLI arguments
 4. The destination is created without replacing an existing path.
 5. Key buffers are cleansed on a best-effort basis. This does not prove all copies are erased.
 
-The key file is a master key, not a password. Version 0.1 does not provide password-based key derivation.
+The key file is a master key, not a password. Neither v0.1 nor v0.3 provides password-based key derivation.
 
 ## Encryption path
 
@@ -55,19 +55,20 @@ The key file is a master key, not a password. Version 0.1 does not provide passw
 
 ## File publication
 
-Temporary files use exclusive creation (`O_CREAT | O_EXCL` on POSIX; `CreateFileW` with `CREATE_NEW` on Windows). The implementation checks finalization steps and uses no-clobber publication. The publication path is rename-first with hard-link fallback, not an `exists()` precheck followed by an unsafe open. POSIX directory synchronization is best-effort. Crash recovery does not guarantee cleanup of every orphaned temporary file.+
+Temporary files use exclusive creation (`O_CREAT | O_EXCL` on POSIX; `CreateFileW` with `CREATE_NEW` on Windows). The implementation checks finalization steps and uses no-clobber publication. On Linux it attempts `renameat2(RENAME_NOREPLACE)` and falls back to hard-link publication; Windows uses `MoveFileExW` and a hard-link fallback. It does not rely only on an `exists()` precheck followed by an unsafe open. POSIX directory synchronization is best-effort. Crash recovery does not guarantee cleanup of every orphaned temporary file.
 
 ## Memory and concurrency
 
-Processing is chunked and does not load whole files into memory. The current design does not document parallel record processing. Cleansing is best-effort and cannot guarantee that compiler, library, stack, register, allocator or operating-system copies have disappeared.+
+Processing is chunked and does not load whole files into memory. The current design does not document parallel record processing. Cleansing is best-effort and cannot guarantee that compiler, library, stack, register, allocator or operating-system copies have disappeared.
 
 ## Security boundary
 
-RCTS does not implement cryptographic primitives itself. Security depends on correct OpenSSL integration, nonce uniqueness, authenticated framing, key secrecy, filesystem behavior, build provenance and host integrity. Independent cryptographic review is incomplete.+
+RCTS does not implement cryptographic primitives itself. Security depends on correct OpenSSL integration, nonce uniqueness, authenticated framing, key secrecy, filesystem behavior, build provenance and host integrity. Independent cryptographic review is incomplete.
 
 ## Architectural limitations
 
-- Single translation unit: `src/main.cpp`.
+- File I/O, atomic publication and key-file parsing are implemented in `src/file_io.cpp`; file operations are in `src/operations.cpp`.
+- `src/main.cpp` is a three-line translation unit. Entry point, CLI, format, crypto, key codec, file I/O and operation orchestration have separate source modules.
 - No stable public library/API separate from the CLI.
 - Platform filesystem behavior needs continued testing.
 - No independently audited secret-memory lifecycle.

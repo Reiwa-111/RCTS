@@ -1,4 +1,4 @@
-# last updated: 0.3.0 | 2026-11-20 | BUILD AND WORKFLOW
+# last updated: 0.3.1 | 2026-11-20 | BUILD AND WORKFLOW
 
 # Development and build guide
 
@@ -9,7 +9,7 @@
 - OpenSSL 3.x Crypto
 - Python 3.8+ for test runners
 
-The project does not yet define a complete CI-backed compiler/platform support matrix. A successful local build is not a claim of compatibility with every toolchain.+
+The project does not yet define a complete CI-backed compiler/platform support matrix. A successful local build is not a claim of compatibility with every toolchain.
 
 ## Linux release build
 
@@ -30,7 +30,7 @@ export PATH="/c/msys64/ucrt64/bin:$PATH"
 ctest --test-dir build --output-on-failure
 ```
 
-OpenSSL runtime DLLs must be available to the test runner. Missing DLLs are environment issues and should not be misreported as application failures.+
+OpenSSL runtime DLLs must be available to the test runner. Missing DLLs are environment issues and should not be misreported as application failures.
 
 ## Visual Studio
 
@@ -50,11 +50,11 @@ cmake --build build-fault --parallel
 ctest --test-dir build-fault --output-on-failure
 ```
 
-Fault-injection builds are for tests and must not be distributed as ordinary application binaries.+
+Fault-injection builds are for tests and must not be distributed as ordinary application binaries.
 
 ### Known-answer test
 
-The deterministic KAT configuration exists only to reproduce a test fixture. Do not ship or use the deterministic KAT binary to encrypt real files.+
+The deterministic KAT configuration exists only to reproduce a test fixture. Do not ship or use the deterministic KAT binary to encrypt real files.
 
 ## Contributor workflow
 

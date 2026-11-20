@@ -1,29 +1,30 @@
-# last updated: 0.3.0 | 2026-11-20 | FORMAT REFERENCE
+# RCTS container format v0.3
 
-# RCTS container format v0.1
-
-**Header version byte:** `1`  
-**Integer byte order:** big-endian  
-**Header size:** 33 bytes  
+**Header version byte:** `3`
+**Legacy reader:** v0.1 (version byte `1`)
+**Integer byte order:** big-endian
+**Header size:** 33 bytes
 **Chunk size:** 1 MiB
 
-This is the wire-format reference. Any change to serialized bytes, framing, nonce construction or authenticated metadata requires compatibility review and explicit versioning.+
+RCTS v0.3 is the current write format. It preserves the v0.1 header, record framing, nonce construction, AAD, AES-256-GCM parameters, key-file format, chunk limits, and final-record rules. The format revision changes the HKDF context string to provide version-specific key separation. New encryption always emits version `3`; decryption supports both v0.1 and v0.3.
+
 
 ## 1. Header (33 bytes)
 
 | Offset | Size | Field | Value/meaning |
 |---:|---:|---|---|
-| 0 | 8 | Magic | `52 43 54 53 0D 0A 1A 0A` (`RCTS\r\n\x1A\n`) |
-| 8 | 1 | Version | `0x01` |
+| 0 | 8 | Magic | `52 43 54 53 0D 0A 1A 0A` (ASCII `RCTS`, CR, LF, SUB, LF) |
+| 8 | 1 | Version | `0x03` for v0.3, `0x01` for legacy v0.1 |
 | 9 | 4 | Chunk size | `0x00100000` (1 MiB), BE |
 | 13 | 16 | Salt | Random HKDF salt from CSPRNG |
 | 29 | 4 | Nonce prefix | Random prefix from CSPRNG |
 
-The complete header is authenticated as part of each record's AAD.+
+The complete header is authenticated as part of each record's AAD.
+
 
 ## 2. Record layout
 
-Records follow the header. Each record contains:
+Each record contains:
 
 | Relative offset | Size | Field |
 |---:|---:|---|
@@ -32,40 +33,36 @@ Records follow the header. Each record contains:
 | 5 | N | Ciphertext, where N equals `plaintext_length` |
 | 5 + N | 16 | AES-GCM authentication tag |
 
-Flags:
-- `0x00` — ordinary record.
-- `0x01` — final record (`FINAL`).
+Flags: `0x00` ordinary record, `0x01` final record (`FINAL`). Non-final records are exactly 1 MiB. Final records contain 0..1 MiB. Empty input uses a zero-length final record with a tag.
 
-Every non-final record must contain exactly 1 MiB of plaintext. The final record contains 0 through 1 MiB inclusive. Empty input is represented by a final record with length 0 and a tag.+
+The maximum is 65,536 records and 64 GiB plaintext. Unknown flags, invalid lengths, missing final markers and trailing bytes are rejected.
 
-The maximum is 65,536 records and 64 GiB of plaintext. The implementation rejects unknown flags, invalid lengths, missing final markers and bytes after the final record.+
 
-## 3. Derived key
+## 3. Derived key and version separation
 
-Each container uses a separate 32-byte derived key:
-
+RCTS v0.3:
 ```text
 file_key = HKDF-SHA-256(
     IKM  = master_key[32],
     salt = header.salt[16],
-    info = ASCII("RCTS v0.1 AES-256-GCM container key"),
+    info = ASCII("RCTS v0.3 AES-256-GCM container key"),
     L    = 32
 )
 ```
 
+Legacy v0.1 uses the original context string `RCTS v0.1 AES-256-GCM container key`. The reader selects the context from the header version. Context strings are not interchangeable.
+
+
 ## 4. Nonce
 
 For record index `i`, starting at zero:
-
 ```text
 nonce(i) = header.nonce_prefix[4] || uint64_be(i)
 ```
+The 12-byte nonce is unique within a container by construction. Cross-container collision risk depends on fresh random salts and nonce prefixes and is probabilistic.
 
-The nonce is 12 bytes (96 bits). The index increments by one per record, preventing nonce reuse within a container. Cross-container key separation depends on fresh random salts; the random nonce prefix provides an additional nonce-space separator. This is probabilistic CSPRNG-based construction, not an absolute collision guarantee across all files ever created.
 
 ## 5. AAD
-
-The authenticated byte sequence for each record is:
 
 ```text
 AAD(i) = header[33]
@@ -73,17 +70,19 @@ AAD(i) = header[33]
       || uint32_be(plaintext_length)
       || flags[1]
 ```
+The tag binds the ciphertext to header, record index, length and record type.
 
-The GCM tag therefore binds the ciphertext to the header, record index, length and record type.
 
-## 6. Container termination
+## 6. Termination and metadata
 
-The record with `FINAL` terminates the stream. EOF must immediately follow it. Extra bytes are rejected. Removing or reordering records violates framing or authentication.
+The FINAL record must be followed immediately by EOF. v0.3 exposes exact content length, record count, fixed chunk size and version. It does not store the source filename or extension. No compression or padding is used.
 
-## 7. Visible metadata
 
-Format v0.1 reveals the exact content length (including final-record length), record count, fixed chunk size and format version. It does not store the original filename, path or extension. No compression or padding is used.+
+## 7. Compatibility
 
-## 8. Compatibility
-
-Version byte `1` identifies RCTS v0.1. Incompatible changes to structure, nonce/AAD semantics, KDF or record rules require a new format version. Version `1` must not be reused for changed bytes. A 1.0 implementation must preserve v0.1 reading or explicitly document a separate migration tool and support window.
+- Version byte `1` is read using the v0.1 HKDF context and original framing.
+- Version byte `3` is written by current encrypt and read using the v0.3 HKDF context.
+- The key file encoding is unchanged.
+- Unknown versions are rejected.
+- The v0.1 public fixture remains a legacy-decryption regression test.
+- This implementation does not provide an in-place container migration command; decrypt v0.1 and encrypt the plaintext to produce v0.3.

@@ -1,8 +1,8 @@
-# last updated: 0.3.0 | 2026-11-20 | ENGLISH DOCUMENTATION INDEX
+# last updated: 0.3.1 | 2026-11-20 | ENGLISH DOCUMENTATION INDEX
 
 # RCTS documentation index
 
-The public documentation is English-only and follows the Diátaxis structure. Pages describe the current RCTS 0.3.0 application and v0.1 container format unless explicitly marked as planned.+
+The public documentation is English-only and follows the Diátaxis structure. Pages describe the current RCTS 0.3.1 application and v0.3 container format, with v0.1 retained for legacy decryption.
 
 | Section | Purpose | Start here |
 |---|---|---|

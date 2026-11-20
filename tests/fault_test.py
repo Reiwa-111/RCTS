@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-FAULTS = ("create", "write", "sync", "close", "publish")
+FAULTS = ("create", "write", "partial-write", "sync", "close", "publish")
 
 
 def run(binary: pathlib.Path, *args: object, fault: str | None = None,
@@ -84,7 +84,7 @@ def main() -> int:
             assert_clean_failure(root, destination, result)
 
         # Decryption fails at each write/publish stage without revealing output.
-        for fault in ("create", "write", "sync", "close", "publish"):
+        for fault in ("create", "write", "partial-write", "decrypt-tag-setup", "sync", "close", "publish"):
             destination = root / f"decrypt-{fault}.out"
             result = run(binary, "decrypt", key, container, destination,
                          fault=fault, expect=1)

@@ -1,13 +1,13 @@
-# last updated: 0.3.0 | 2026-11-20 | DOCUMENTATION RESTRUCTURE
+# last updated: 0.3.1 | 2026-11-20 | RELEASE PREPARATION
 
 # RCTS
 
-**RCTS** is an experimental C++20 command-line tool for encrypting files into a chunked authenticated container. Container format RCTS v0.1 uses AES-256-GCM and HKDF-SHA-256 from OpenSSL 3.x. This is a research prototype, not an independently reviewed security product.
+**RCTS** is an experimental C++20 command-line tool for encrypting files into a chunked authenticated container. Container format RCTS v0.3 uses AES-256-GCM and HKDF-SHA-256 from OpenSSL 3.x. This is a research prototype, not an independently reviewed security product.
 
 | Property | Value |
 |---|---|
-| Application version | `0.3.0` (`VERSION`) |
-| Container format | `v0.1` (header version byte `1`) |
+| Application version | `0.3.1` (`VERSION`) |
+| Container format | `v0.3` (header version byte `3`, legacy v0.1 readable) |
 | Language | C++20 |
 | Crypto dependency | OpenSSL 3.x, Crypto |
 | Interface | CLI: `keygen`, `encrypt`, `decrypt` |

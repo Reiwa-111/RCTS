@@ -1,5 +1,6 @@
 /build/
 /build-*/
+build-*.log
 
 CMakeFiles/
 CMakeCache.txt
@@ -15,6 +16,9 @@ __pycache__/
 !tests/vectors/hello-world-v0.1.key
 !tests/vectors/hello-world-v0.1.rct
 !tests/vectors/encrypt-hello-world-v0.1.rct
+!tests/vectors/encrypt-hello-world-v0.3.rct
 
 # Private engineering notes, QA and handoff
 INTERNAL_DOCS/
+# Local legacy build archive; intentionally excluded from the release.
+OLD_BUILDS_LEGACY_PLEASE_CHECK_AND_DELETE/

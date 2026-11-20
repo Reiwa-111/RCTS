@@ -1,10 +1,10 @@
-# last updated: 0.3.0 | 2026-11-20 | THREAT MODEL REVIEW
+# last updated: 0.3.1 | 2026-11-20 | THREAT MODEL REVIEW
 
 # Security model and limitations
 
 ## Intended use
 
-RCTS v0.1 is an experimental local file-encryption tool. Its intended goal is confidentiality and integrity of file contents when the master key is secret and the host environment is trustworthy. It is not production-reviewed and must not be the only protection for critical or irreplaceable data.+
+RCTS v0.3 is an experimental local file-encryption tool. Its intended goal is confidentiality and integrity of file contents when the master key is secret and the host environment is trustworthy. It is not production-reviewed and must not be the only protection for critical or irreplaceable data.
 
 ## Assumptions
 
@@ -45,16 +45,22 @@ The key is not a password and has no password-strengthening step. Do not put it 
 
 ## File handling
 
-RCTS aims to avoid replacing existing destinations and publishes completed output only after processing and finalization. Temporary files may remain after abnormal termination. Directory synchronization is best-effort; universal crash durability across filesystems is not claimed.
+RCTS aims to avoid replacing existing destinations and publishes completed output only after processing and finalization. During decryption, the temporary sibling file contains authenticated plaintext as it is processed. A normal error path removes it, but abrupt process termination (for example, SIGKILL) or power loss can bypass destructors and leave a plaintext prefix in a `.rcts.partial-*` file. The temporary file is created with private permissions and an unpredictable name, but users should still decrypt into a directory protected from other local accounts and inspect that directory after an interrupted operation. Do not treat the temporary-file lifecycle as secure against process interruption. Directory synchronization is best-effort; universal crash durability across filesystems is not claimed.
 
 ## Assurance status
 
-- Independent cryptographic review: **not completed**.
+- Independent cryptographic review: **report received; finding verification and remediation remain incomplete**.
 - Cross-platform filesystem audit: **incomplete**.
-- CI matrix: **not established**.
+- CI matrix: **workflow defined for Ubuntu, macOS and Windows/MSYS2 UCRT64; hosted results pending**.
 - Fuzzing and property-based testing: **planned/incomplete**.
 - Production readiness or certification: **not claimed**.
 
 ## Vulnerability reporting
 
 Report suspected vulnerabilities privately to the maintainer before publishing details. Include the affected revision, reproducible steps and environment. Do not attach keys or confidential plaintext.
+
+## Secret-memory handling
+
+The implementation cleanses selected owned buffers on scope exit, including key-decoding buffers, master and derived keys, and plaintext chunk buffers. This is best-effort hygiene, not a guarantee of complete erasure: copies may remain in registers, stack slots, OpenSSL internals, allocator-managed memory, or compiler-created temporaries. The application cannot guarantee forensic erasure from process memory.
+
+The crypto API also clears a caller-provided plaintext vector's previous contents before reuse, including when a subsequent decrypt request fails early or authentication fails. This reduces stale plaintext retention in reusable output buffers; it does not prove that all historical allocations or copies have been erased.

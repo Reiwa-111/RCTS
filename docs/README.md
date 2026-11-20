@@ -1,4 +1,4 @@
-# last updated: 0.3.0 | 2026-11-20 | DOCUMENTATION LANDING PAGE
+# last updated: 0.3.1 | 2026-11-20 | DOCUMENTATION LANDING PAGE
 
 # RCTS documentation
 

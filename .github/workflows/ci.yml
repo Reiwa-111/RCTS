@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  tags: ["v*", "0.*"]
+  paths-ignore:
+    - "docs/**"
+    - "README.md"
+    - "CHANGELOG.md"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libssl-dev python3
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake openssl@3 python
+
+      - name: Locate macOS OpenSSL
+        if: runner.os == 'macOS'
+        run: echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+
+      - name: Configure and test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT_DIR"
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Set up MSYS2 UCRT64
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-python
+
+      - name: Configure and test (Windows UCRT64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR=/ucrt64
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Configure fault-injection build
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build-fault -DCMAKE_BUILD_TYPE=Debug -DRCTS_ENABLE_FAULT_INJECTION=ON
+
+      - name: Build and run fault-injection tests
+        if: runner.os != 'Windows'
+        run: |
+          cmake --build build-fault --parallel
+          ctest --test-dir build-fault --output-on-failure
+
+      - name: Configure fault-injection build (Windows UCRT64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: cmake -S . -B build-fault -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRCTS_ENABLE_FAULT_INJECTION=ON -DOPENSSL_ROOT_DIR=/ucrt64
+
+      - name: Build and run fault-injection tests (Windows UCRT64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cmake --build build-fault --parallel
+          ctest --test-dir build-fault --output-on-failure

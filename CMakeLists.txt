@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(RCTSSandbox VERSION 0.3.0 LANGUAGES CXX)
+project(RCTSSandbox VERSION 0.3.1 LANGUAGES CXX)
 
 option(RCTS_ENABLE_WARNINGS "Enable strict compiler warnings" ON)
 option(RCTS_ENABLE_FAULT_INJECTION
@@ -7,13 +7,18 @@ option(RCTS_ENABLE_FAULT_INJECTION
 
 find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
-add_executable(rcts src/main.cpp)
+add_executable(rcts src/main.cpp src/entry.cpp src/cli.cpp src/operations.cpp src/file_io.cpp src/crypto.cpp src/key_codec.cpp)
 target_compile_features(rcts PRIVATE cxx_std_20)
 target_compile_definitions(rcts PRIVATE RCTS_VERSION="${PROJECT_VERSION}")
 target_link_libraries(rcts PRIVATE OpenSSL::Crypto)
 
 if(RCTS_ENABLE_FAULT_INJECTION)
-    target_compile_definitions(rcts PRIVATE RCTS_ENABLE_FAULT_INJECTION)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        message(FATAL_ERROR "Fault injection must not be enabled for Release builds")
+    endif()
+    target_compile_definitions(rcts PRIVATE RCTS_ENABLE_FAULT_INJECTION RCTS_TEST_BUILD)
+else()
+    target_compile_definitions(rcts PRIVATE RCTS_PRODUCTION_TARGET)
 endif()
 
 if(WIN32)
@@ -59,10 +64,21 @@ if(BUILD_TESTING)
     )
     set_tests_properties(rcts_smoke PROPERTIES TIMEOUT 300)
 
+    add_test(
+        NAME rcts_release_randomness
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/release_randomness.py"
+                "$<TARGET_FILE:rcts>"
+    )
+    set_tests_properties(rcts_release_randomness PROPERTIES TIMEOUT 60)
+
     # Separate test-only binary with deterministic salt/nonce injection. It is not installed.
-    add_executable(rcts-kat src/main.cpp)
+    add_executable(rcts-kat src/main.cpp src/entry.cpp src/cli.cpp src/operations.cpp src/file_io.cpp src/crypto.cpp src/key_codec.cpp)
     target_compile_features(rcts-kat PRIVATE cxx_std_20)
-    target_compile_definitions(rcts-kat PRIVATE RCTS_VERSION="${PROJECT_VERSION}" RCTS_ENABLE_KAT)
+    target_compile_definitions(rcts-kat PRIVATE
+        RCTS_VERSION="${PROJECT_VERSION}"
+        RCTS_ENABLE_KAT
+        RCTS_TEST_BUILD
+    )
     target_link_libraries(rcts-kat PRIVATE OpenSSL::Crypto)
     if(WIN32)
         target_link_libraries(rcts-kat PRIVATE Advapi32)
@@ -78,6 +94,22 @@ if(BUILD_TESTING)
                 "$<TARGET_FILE:rcts-kat>"
     )
     set_tests_properties(rcts_encryption_kat PROPERTIES TIMEOUT 60)
+
+    add_executable(rcts-crypto-api-test tests/crypto_api_test.cpp src/crypto.cpp)
+    target_compile_features(rcts-crypto-api-test PRIVATE cxx_std_20)
+    target_link_libraries(rcts-crypto-api-test PRIVATE OpenSSL::Crypto)
+    if(RCTS_ENABLE_WARNINGS)
+        if(MSVC)
+            target_compile_options(rcts-crypto-api-test PRIVATE /W4 /permissive-)
+        else()
+            target_compile_options(rcts-crypto-api-test PRIVATE
+                -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+                -Wshadow -Wformat=2 -Wundef
+            )
+        endif()
+    endif()
+    add_test(NAME rcts_crypto_api COMMAND rcts-crypto-api-test)
+    set_tests_properties(rcts_crypto_api PROPERTIES TIMEOUT 60)
 
     if(RCTS_ENABLE_FAULT_INJECTION)
         add_test(
