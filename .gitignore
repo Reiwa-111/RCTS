@@ -17,3 +17,6 @@ __pycache__/
 !tests/vectors/hello-world-v0.1.key
 !tests/vectors/hello-world-v0.1.rct
 !tests/vectors/encrypt-hello-world-v0.1.rct
+
+# Private engineering notes, QA and handoff
+INTERNAL_DOCS/
