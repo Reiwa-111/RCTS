@@ -1,8 +1,12 @@
-# Тестирование
+# last updated: 0.3.0 | 2026-11-20 | TESTING CONTRACT
 
-## Автоматические тесты в репозитории
+# Тестирование RCTS
 
-`tests/smoke_test.py` — black-box тесты CLI на стандартной библиотеке Python. CTest запускает их после сборки.
+## Test philosophy
+
+Tests establish specific behaviors of a particular build. They do not prove cryptographic security, eliminate untested filesystem states or substitute for independent review. Each result must be tied to the source revision and build environment.
+
+## Standard CTest flow
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -10,58 +14,55 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Текущий набор проверяет:
+CTest registers black-box Python tests. The main smoke suite is `tests/smoke_test.py`; it runs the built CLI and validates behavior using temporary test files. Python 3.8+ is required by the test runner.
 
-- расшифрование фиксированного публичного тест-вектора `HELLO WORLD`, чтобы сохранить совместимость с форматом v0.1;
-- создание ключа, длину в 32 кодовые точки и допустимый диапазон Unicode;
-- отказ перезаписывать уже существующий ключевой файл;
-- варианты ключевого файла с LF, CRLF и без завершающего перевода строки;
-- отказ для пустого, слишком большого, усечённого и расширенного ключевого файла, BOM, пробелов, неверного UTF-8 и символов вне `U+4E00..U+4EFF`;
-- round-trip пустого файла, коротких файлов, файлов около границы 1 MiB и многоблочного файла;
-- различие контейнеров при повторном шифровании одинаковых данных одним ключом;
-- структурная проверка заголовка и последовательности записей для пустого, короткого, граничного и многоблочного контейнера;
-- отказ перезаписывать существующий выходной файл, каталог и символическую ссылку (включая висячую, если ОС разрешает их создание);
-- отказ при неправильном ключе, отсутствующем входе и входе-каталоге;
-- обнаружение изменения magic, версии, размера блока, соли, nonce-префикса, ciphertext и тега;
-- усечение заголовка на каждой длине от 0 до 32 байт, отсутствующий тег и усечённый ciphertext;
-- обнаружение лишних байтов и структурно правдоподобной лишней записи после FINAL;
-- отказ при недопустимых флагах, короткой нефинальной записи, нулевой нефинальной записи, огромной длине и нулевой финальной записи не с индексом 0;
-- отказ при отсутствии FINAL, перестановке и дублировании записей;
-- отсутствие опубликованного выходного файла и временных `.rcts.partial-*` после ошибок.
+## Test assets and scripts
 
-Эти тесты предназначены для обнаружения регрессий CLI и формата. Они не являются криптографическим аудитом.
+| Asset | Purpose | Limit |
+|---|---|---|
+| `tests/smoke_test.py` | CLI behavior, round-trip, key validation, malformed inputs, no-overwrite and tamper rejection | Functional tests, not crypto audit |
+| `tests/encryption_kat.py` | Deterministic fixture compatibility test | Test-only deterministic configuration |
+| `tests/vectors/` | Public fixture container and vector metadata | Test key is intentionally public and must never be reused for real data |
+| `tests/fault_test.py` | Exercises fault hooks for selected I/O/publication operations | Only available in fault-injection build; not exhaustive filesystem fault simulation |
+
+
+## Current coverage categories
+
+- Key generation, encoding and malformed key files.
+- Empty, short, boundary-sized and multi-record inputs.
+- Round-trip output integrity.
+- Existing output path protection, including symlink cases where the host supports them.
+- Container header and record framing validation.
+- Tampering with authenticated header/record data and tags.
+- Truncation, trailing bytes, malformed record sequences and invalid FINAL placement.
+- I/O failure paths and temporary-file cleanup through fault hooks.
+- Known-answer compatibility fixture.
+
+Exact test names and count vary with the checked-in test script/build configuration. Use the actual captured test output rather than copying a historical count.
 
 ## Fault injection
 
-Fault hooks are disabled by default. Configure a separate testing binary (never ship this build):
+The separate `RCTS_ENABLE_FAULT_INJECTION` build exercises controlled failures at create, write, sync, close and publication steps. The test should confirm failure status and absence of a published final file or leftover temporary file where cleanup is expected. It cannot emulate every kernel, filesystem, hardware or power-loss failure.
 
-```sh
-cmake -S . -B build-fault -DCMAKE_BUILD_TYPE=Debug -DRCTS_ENABLE_FAULT_INJECTION=ON
-cmake --build build-fault --parallel
-ctest --test-dir build-fault --output-on-failure
-```
+## Evidence record
 
-`tests/fault_test.py` injects failures at `create`, `write`, `sync`, `close`, and `publish` for keygen/encrypt/decrypt and verifies that no final output or partial temporary files remain.
+For each formal run, record:
 
+- date and commit hash;
+- OS, architecture, compiler and CMake versions;
+- OpenSSL version and discovery path;
+- configure/build commands and options;
+- test command, full output and exit code;
+- suite-specific totals and skips;
+- deviations, failed tests and environmental caveats.
 
-## Снимок тестирования
+Do not record secrets or real plaintext. Keep logs in local ignored build/evidence directories unless they are deliberately scrubbed and approved for publication.
 
-Сборка и тестирование должны запускаться в окружении пользователя/CI. Не переносить результат старых запусков на новый снимок исходников. Результаты конкретного запуска следует сохранять вместе с commit/hash, конфигурацией сборки и выводом CTest; результаты старых запусков не переносить на новый снимок исходников.
+## Not yet established
 
-## Недостающие тесты до 1.0
-
-- fuzzing заголовка, framing записей и декодера Unicode-ключа;
-- property-based тесты round-trip и негативные свойства;
-- тесты с ошибками чтения/записи, заполнением диска, отказом `flush`/`close`;
-- аварийное завершение во время шифрования и расшифрования;
-- гонки создания временного и целевого файла;
-- границы максимального количества записей и размера контейнера;
-- проверка на повреждённых контейнерах с очень большими заявленными длинами;
-- Windows/MSVC, Windows/Clang, Linux/GCC, Linux/Clang и macOS/Clang (если платформа заявляется поддерживаемой);
-- ASan/UBSan, а где доступно — другие подходящие анализаторы;
-- повторяемые CI-сборки с зафиксированными версиями зависимостей.
-
-Не запускай ресурсоёмкие soak-тесты без необходимости. Для каждого теста указывай, что именно он проверяет и какие ограничения остаются.
-
-
-Публичный вектор расположен в `tests/vectors/`. Ключ в нём известен всем и годится только для проверки совместимости; никогда не используй его для собственных данных.
+- Complete Windows compiler/OS matrix and MSVC acceptance.
+- macOS acceptance.
+- Fuzzing of the complete container parser and key decoder.
+- Exhaustive disk-full, short-write, flush, close and sync fault coverage.
+- Independent cryptographic audit.
+- Formal crash-consistency guarantees across filesystems.

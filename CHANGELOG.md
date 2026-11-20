@@ -1,37 +1,22 @@
 # Changelog
 
-## 0.3.0 — файловая безопасность и аварийные сценарии (2026-11-20)
+This changelog records user-visible changes. It does not replace test reports or security audits.
 
-- Временный файл создаётся эксклюзивно (`O_CREAT | O_EXCL` на POSIX, `CreateFileW` с `CREATE_NEW` на Windows) в каталоге назначения. Удалена неатомарная схема `exists()` + `ofstream`.
-- Добавлены проверяемые `flush`, `fsync`/`_commit` и `close` до публикации результата.
-- `keygen`, `encrypt` и `decrypt` публикуют результат через временный файл и no-clobber rename/link без перезаписи; при обычной ошибке временный файл удаляется.
-- Ключевой файл читается ограниченно (не более 1024 байт); ключ и входной файл должны быть обычными файлами. Убрано неограниченное чтение ключа через `istreambuf_iterator`.
-- Существование выходного пути проверяется через `symlink_status`, поэтому висячая символическая ссылка больше не считается отсутствующим файлом.
-- Удалено временное изменение process-global `umask`: POSIX-файлы создаются с режимом `0600` напрямую.
-- Расширены black-box regression-тесты: варианты ключевого файла, границы заголовка и записей, перестановка/дублирование записей, отсутствие FINAL, огромные длины, no-clobber для symlink, отсутствие временных файлов после ошибок.
-- Бинарный формат v0.1 (`Version=1`), KDF, nonce, AAD и правила записей не изменялись.
+## 0.3.0 — file handling and failure-path hardening (2026-11-20)
 
-- На Windows выходные файлы получают protected DACL для текущего пользователя, SYSTEM и local Administrators.
-- Публикация без перезаписи использует Linux `renameat2(RENAME_NOREPLACE)` или Windows `MoveFileExW` с hard-link fallback; синхронизация каталога POSIX best-effort.
-- Добавлены конкурентные тесты публикации, 80 детерминированных мутаций и fault-injection тесты create/write/sync/close/publish. Hooks компилируются только с `RCTS_ENABLE_FAULT_INJECTION`.
-- Добавлены best-effort guards с `OPENSSL_cleanse` для локальных буферов ключей и plaintext; все копии compiler/runtime гарантированно очистить невозможно.
-- Версия приложения — 0.3.0; бинарный формат v0.1 (`Version=1`), KDF, nonce, AAD и framing записей не изменились.
+- Tightened exclusive output creation and no-clobber publication.
+- Added checked finalization behavior for flush, synchronization and close paths.
+- Expanded validation of input/key paths and malformed key material.
+- Added public compatibility test vector and deterministic known-answer test infrastructure.
+- Added test-only fault injection for selected file-operation failures.
+- Updated specification, implementation documentation and security limitations.
 
-## 0.1.0 — исследовательский прототип
+## 0.2.0 — container implementation baseline
 
-- C++20 CLI: `keygen`, `encrypt`, `decrypt`.
-- 32-байтовый случайный мастер-ключ в текстовой форме из 32 Unicode-кодовых точек.
-- HKDF-SHA-256 для вывода отдельного ключа контейнера.
-- AES-256-GCM, 1 MiB records, 16-byte tags.
-- Аутентификация заголовка и framing каждой записи.
-- Временный выходной файл и отказ от перезаписи существующего назначения.
-- Первичная спецификация формата и модель угроз.
+- Established the RCTS v0.1 chunked authenticated container and CLI workflow.
+- Added key generation, encryption and decryption commands.
+- Added streaming processing, authenticated record metadata and test coverage.
 
-## Repository maintenance — 2026-11-20
+## 0.1.0 — initial prototype
 
-- Добавлен CMake build definition, соответствующий существующему CLI.
-- Добавлен black-box CLI smoke/regression test suite для CTest, включая проверку публичного v0.1 known-answer vector.
-- Сверены и переписаны README, формат, спецификация, архитектура и ограничения безопасности.
-- Добавлена дорожная карта поэтапного развития до 1.0 и обновлены правила разработки и документация.
-- Зафиксированы ограничения temp-file handling, Windows ACL, hard-link portability и отсутствия независимого аудита.
-- Криптографические параметры и бинарная структура RCTS v0.1 не менялись.
+- Initial research prototype for a local encrypted file container.

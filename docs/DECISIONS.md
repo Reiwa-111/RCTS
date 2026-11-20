@@ -1,67 +1,56 @@
-# Журнал архитектурных решений
+# last updated: 0.3.0 | 2026-11-20 | ADR REVIEW
 
-Этот файл фиксирует решения текущего прототипа и правила изменения дизайна. Он не является доказательством безопасности.
+# Architecture decision records
 
-## ADR-001 — использовать OpenSSL, не писать собственный шифр
 
-**Статус:** принято для v0.1.
-**Решение:** AES-256-GCM, HKDF-SHA-256 и CSPRNG используются через OpenSSL.
-**Причина:** проект исследует контейнер и управление потоком данных, а не изобретает криптографические примитивы.
-**Последствие:** безопасность зависит от корректного использования OpenSSL, параметров протокола и реализации; независимый review всё равно необходим.
+This log captures decisions for the current experimental implementation. Decisions may be superseded, but their historical entries should remain and link to the replacement.
 
-## ADR-002 — отдельная GCM-запись на каждый блок
 
-**Статус:** принято для v0.1.
-**Решение:** файл делится на блоки по 1 MiB; каждая запись имеет собственный AES-GCM tag и nonce, сформированный из префикса и индекса.
-**Причина:** потоковая обработка, ограниченное использование памяти и аутентификация порциями.
-**Последствие:** формат должен строго проверять порядок, длину, флаги, индекс и FINAL. Ошибки framing приводят к отказу.
+## ADR-001 — use OpenSSL primitives, do not invent a cipher
 
-## ADR-003 — HKDF-SHA-256 на каждый контейнер
+**Status:** Accepted for v0.1.
+**Decision:** Use OpenSSL for AES-256-GCM, HKDF-SHA-256 and cryptographic randomness.
+**Rationale:** RCTS is an experiment in container format and I/O behavior, not a cryptographic primitive design project.
+**Consequences:** Correctness depends on safe integration, parameter discipline and dependency behavior. Independent review remains required.
 
-**Статус:** принято для v0.1.
-**Решение:** отдельный 32-байтовый file key выводится из мастер-ключа с 16-байтовой случайной солью и фиксированным `info`.
-**Причина:** разделение ключевого материала между контейнерами.
-**Последствие:** параметры `info`, salt и KDF — часть формата и не могут изменяться незаметно.
+## ADR-002 — authenticate records independently
 
-**Фиксация v0.1:** `info` хранится в `kHkdfInfoV0_1`, HKDF использует явно заданный `EXTRACT_AND_EXPAND`. Эти параметры заморожены; изменение требует новой версии формата и тест-вектора.
+**Status:** Accepted for v0.1.
+**Decision:** Process up to 1 MiB per record; each record has its own GCM tag and index-derived nonce.
+**Rationale:** Streaming with bounded memory and per-record integrity verification.
+**Consequences:** Framing, ordering, lengths, flags, final-record handling and nonce uniqueness are security-critical.
 
-## ADR-004 — Unicode является кодировкой случайного ключа, не паролем
+## ADR-003 — derive a container-specific key
 
-**Статус:** принято для v0.1.
-**Решение:** каждый из 32 случайных байтов отображается в отдельную кодовую точку `U+4E00..U+4EFF`.
-**Причина:** удобное визуальное представление и проверяемое преобразование байт-в-символ.
-**Последствие:** энтропия остаётся 256-битной только потому, что байты сгенерированы CSPRNG. Само отображение не добавляет стойкости.
+**Status:** Accepted for v0.1.
+**Decision:** Use HKDF-SHA-256 with a random 16-byte salt and fixed info string to derive a 32-byte container key.
+**Rationale:** Separate container keys while retaining a generated master key.
+**Consequences:** The salt and info string are format compatibility parameters and must not be changed casually.
 
-## ADR-005 — не скрывать размер в v0.1
+## ADR-004 — generated Unicode key representation
 
-**Статус:** принято для v0.1.
-**Решение:** не использовать padding или dummy records.
-**Причина:** минимизировать сложность протокола первой версии.
-**Последствие:** контейнер раскрывает размер данных. Padding может рассматриваться только как отдельное свойство будущего формата.
+**Status:** Accepted for v0.1.
+**Decision:** Encode each of the 32 key bytes as a code point in `U+4E00..U+4EFF`.
+**Rationale:** A simple textual representation with an unambiguous byte mapping.
+**Consequences:** Strict UTF-8 and exact character-range validation are required; it is not a mnemonic password.
 
-## ADR-006 — не перезаписывать выходной файл
+## ADR-005 — fixed header and authenticated metadata
 
-**Статус:** принято для v0.1.
-**Решение:** публикация результата должна завершаться отказом, если целевой путь уже существует.
-**Текущая реализация:** эксклюзивно созданный временный файл + проверяемые `flush`/`fsync`/`close` + no-clobber rename/link (Linux `renameat2`, Windows `MoveFileExW`, hard-link fallback).
-**Последствие:** unsupported publication operations fail without overwriting. TOCTOU родительского каталога остаётся вне модели угроз.
+**Status:** Accepted for v0.1.
+**Decision:** Use a 33-byte header; authenticate the header and record index/length/flags as AAD.
+**Rationale:** Detect header or framing manipulation during record authentication.
+**Consequences:** Parsing rules and serialized bytes are frozen for format version 1.
 
-## ADR-007 — несовместимые изменения требуют новой версии формата
+## ADR-006 — streaming and temporary output
 
-**Статус:** принято.
-**Решение:** нельзя менять смысл Version 1. Любое несовместимое изменение получает новый номер формата, спецификацию, test vectors и план миграции.
-**Причина:** сохранение возможности читать существующие контейнеры.
+**Status:** Accepted.
+**Decision:** Do not load whole files into memory. Write to a destination-directory temporary file and publish after successful finalization without overwriting an existing path.
+**Rationale:** Bounded memory, safer failure handling and reduced exposure of partial output.
+**Consequences:** Filesystem semantics differ; crash durability and cleanup are not universal guarantees.
 
-## ADR-008 — эксклюзивный временный файл, sync и no-clobber публикация
+## ADR-007 — prototype status and versioning
 
-**Статус:** принято для приложения 0.3.0 и формата контейнера v0.1.
-**Решение:** результат пишется в короткий `.rcts.partial-*` в каталоге назначения с эксклюзивным созданием. Перед публикацией проверяются `flush`, `fsync`/`_commit` и `close`; используется no-replace rename/link. POSIX файлы имеют `0600`; Windows применяет protected DACL текущего пользователя, SYSTEM и Administrators.
-**Причина:** убрать неатомарную схему `exists()` + `ofstream`, не менять process-global `umask`, не терять ошибки закрытия и не перезаписывать существующий путь.
-**Последствие:** no-clobber publication может завершиться ошибкой на неподдерживаемой ФС; POSIX sync каталога best-effort. Временное имя не образуется добавлением суффикса к длинному целевому имени.
-
-## ADR-009 — ограниченное чтение ключевого файла и обычные входные файлы
-
-**Статус:** принято для приложения 0.3.0; бинарный формат контейнера — v0.1.
-**Решение:** ключевой файл и входной контейнер/plaintext должны быть обычными файлами; ключевой файл читается не более 1024 байт.
-**Причина:** валидный ключ занимает 96 UTF-8 байт плюс максимум CRLF; неограниченное чтение по ошибочному пути создаёт риск неконтролируемого выделения памяти и не соответствует формату.
-**Последствие:** именованные каналы, устройства и другие не-regular файлы как вход не поддерживаются. Это поведение можно пересмотреть только отдельным решением.
+**Status:** Accepted.
+**Decision:** Application version `0.3.0` and container version `v0.1` are separate. The current container format is experimental.
+**Rationale:** Software iteration should not imply wire-format changes.
+**Consequences:** Release documentation must state both versions. Format changes require a new format version and explicit compatibility decisions.

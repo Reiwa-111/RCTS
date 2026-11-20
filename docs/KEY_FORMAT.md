@@ -1,34 +1,20 @@
-# Формат ключевого файла RCTS v0.1
+# last updated: 0.3.0 | 2026-11-20 | KEY REFERENCE
 
-## Сырой ключ
+# RCTS v0.1 key-file format
 
-Генератор получает ровно 32 случайных байта через `RAND_bytes` OpenSSL. Это 256 бит случайного материала. Пользовательский пароль или самостоятельно придуманная строка в v0.1 не поддерживаются.
 
-## Текстовое представление
+## Key material
 
-Каждый байт `b` отображается в одну Unicode-кодовую точку:
+The generator requests exactly 32 random bytes from OpenSSL `RAND_bytes`. The key is not a password, passphrase or human-selected secret. No password stretching or password-based recovery is implemented.
 
-```text
-code_point = U+4E00 + b
-```
+## Text encoding
 
-Диапазон допустимых символов: `U+4E00..U+4EFF`. Получается ровно 32 Unicode-кодовые точки, каждая кодируется в UTF-8 тремя байтами; длина полезного текста ключа — 96 байт.
+Each byte `b` is represented as the Unicode code point `U+4E00 + b`. The allowed range is `U+4E00..U+4EFF`; the file contains exactly 32 code points, encoded in UTF-8 (96 bytes for the code points, excluding the optional line ending). The generator writes a trailing LF. Reading accepts no line ending, one LF or one CRLF.
 
-Генератор добавляет в конец один LF (`0A`). При чтении разрешены отсутствие завершающего перевода строки, один LF или один CRLF. Другие завершающие пробельные символы не нормализуются.
+## Validation
 
-## Валидация
+The reader rejects empty, over-limit, truncated, extended, BOM-prefixed, whitespace-padded, invalid UTF-8 and out-of-range characters. It does not normalize arbitrary Unicode or trim whitespace. Key reads are bounded; the accepted key file is an ordinary file.
 
-Реализация требует:
+## Handling
 
-- ровно 96 байт UTF-8 после удаления одного допустимого завершающего перевода строки;
-- 32 корректных последовательных трёхбайтовых UTF-8 кодирования;
-- только кодовые точки из `U+4E00..U+4EFF`;
-- отсутствие BOM, пробелов и дополнительных символов.
-
-Формат намеренно не использует Unicode-нормализацию: каждая кодовая точка является способом представить конкретный байт, а не естественным языковым текстом.
-
-## Обращение с ключом
-
-Ключевой файл даёт полный доступ к данным. Не помещай его в репозиторий, облако без защиты, скриншоты или логи. Храни резервную копию отдельно от контейнеров. Потерянный ключ нельзя восстановить из контейнера. Текстовая форма не является дополнительным шифрованием ключа.
-
-Ключевой файл должен быть обычным файлом. Чтение ограничено 1024 байтами, чтобы ошибочный путь не приводил к неограниченному выделению памяти. `keygen` пишет ключ во временный файл в каталоге назначения, проверяет `flush`/`fsync`/`close` и публикует его через no-clobber rename/link; существующий файл не перезаписывается. На POSIX новый ключевой файл создаётся с правами `0600`; на Windows используется protected DACL для текущего пользователя, SYSTEM и local Administrators.
+Treat the key file as secret material. Keep it outside source control and backups that are accessible to unintended parties. Protect access, maintain a recovery copy in an appropriately secure location, and do not confuse the public test vector's key with a real secret. Best-effort memory cleansing does not guarantee erasure of every copy.

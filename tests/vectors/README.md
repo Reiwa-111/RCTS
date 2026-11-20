@@ -1,9 +1,7 @@
-# Публичный тест-вектор RCTS v0.1
+# Public compatibility vectors
 
-Этот набор предназначен только для проверки совместимости формата. Ключ опубликован и НЕ является секретом. Никогда не используйте его для реальных данных.
 
-- Контейнер: `hello-world-v0.1.rct`
-- Ключ: `hello-world-v0.1.key`
-- Ожидаемый plaintext: ASCII `HELLO WORLD` (11 байт)
+The fixture files in this directory are deterministic test artifacts. They use known test-only material and are intended only to validate compatibility with the RCTS v0.1 implementation. Never reuse the fixture key or deterministic KAT configuration to encrypt private data.
 
-Фиксированный контейнер проверяет совместимость расшифрования. Отдельный `encrypt-hello-world-v0.1.rct` используется тестом детерминированного шифрования (KAT) и сравнивает полный выход шифрования с эталонными байтами. Детерминированная генерация соли и nonce доступна только тестовой сборке `rcts-kat`, не устанавливается и не входит в production-бинарник.
+
+The test vector is consumed by the smoke/KAT test scripts. The fixture is checked in intentionally so implementations can verify byte-level behavior without generating a new encrypted output.

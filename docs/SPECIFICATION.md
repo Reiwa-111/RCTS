@@ -1,14 +1,18 @@
-# Спецификация RCTS v0.1
+# last updated: 0.3.0 | 2026-11-20 | APPLICATION SPECIFICATION
 
-**Статус:** экспериментальная спецификация формата; приложение RCTS 0.3.0 использует этот формат без изменений.
-**Бинарная версия:** `1`.
-**Дата снимка документации:** 2026-11-20.
+# RCTS v0.1 specification
 
-## Назначение
 
-RCTS — локальная CLI-утилита для превращения произвольного файла в потоковый аутентифицированный контейнер. Она использует существующие примитивы OpenSSL, а не собственный блочный шифр.
+**Status:** Experimental container format specification.
+**Application version:** `0.3.0`.
+**Binary version:** `1`.
+**Snapshot date:** 2026-11-20.
 
-## Команды
+## Purpose
+
+RCTS converts an input file into a chunked authenticated encrypted container. It relies on OpenSSL primitives and defines framing, metadata authentication and file publication behavior. It is not an audited production security product.
+
+## CLI contract
 
 ```text
 rcts keygen <key-file>
@@ -16,28 +20,41 @@ rcts encrypt <key-file> <input-file> <output.rct>
 rcts decrypt <key-file> <input.rct> <output-file>
 ```
 
-Успешная команда возвращает 0. Некорректные аргументы возвращают 2, ошибка операции — 1. Существующие выходные файлы, включая висячие символические ссылки, и файлы ключей не перезаписываются. Входной файл и ключевой файл должны быть обычными файлами; ключевой файл читается ограниченно.
+Exit codes: `0` success, `1` operation failure, `2` invalid command-line arguments. Existing destination files are not overwritten. Key and input files must satisfy ordinary-file validation; key reads are bounded.
 
-## Криптографические параметры
+## Fixed parameters
 
-- мастер-ключ: 32 байта CSPRNG;
-- отображение ключа: 32 символа `U+4E00..U+4EFF`;
-- KDF: HKDF-SHA-256;
-- соль: 16 байт;
-- `info`: `RCTS v0.1 AES-256-GCM container key`;
-- шифр: AES-256-GCM;
-- nonce: 4-байтовый префикс + 64-битный индекс записи (big-endian);
-- тег: 16 байт;
-- AAD: заголовок + индекс + длина + флаги.
+| Parameter | Value |
+|---|---|
+| Master key | 32 random bytes |
+| Key text | 32 Unicode code points `U+4E00..U+4EFF` |
+| KDF | HKDF-SHA-256 |
+| KDF salt | 16 bytes |
+| KDF info | `RCTS v0.1 AES-256-GCM container key` |
+| Derived key | 32 bytes |
+| Cipher | AES-256-GCM |
+| Tag | 16 bytes per record |
+| Header | 33 bytes |
+| Chunk | 1 MiB |
+| Nonce | 4-byte prefix + 8-byte BE record index |
+| Record cap | 65,536 |
+| Plaintext cap | 64 GiB |
 
-## Потоковая обработка
+## Streaming and integrity
 
-Размер блока — 1 MiB. Реализация держит в памяти несколько буферов размера блока и не загружает весь входной файл целиком. Максимум 65 536 записей (64 GiB). Пустой файл кодируется одной пустой финальной записью.
+Input is processed in bounded chunks. Each record authenticates the header and record metadata as AAD. Decryption validates structure and tags, and only publishes the completed output after final validation. Empty input is encoded with an empty final record.
 
-Временный файл создаётся эксклюзивно в каталоге назначения с приватными правами: POSIX `0600`, Windows protected DACL для текущего пользователя, SYSTEM и Administrators. При расшифровании каждая запись аутентифицируется до записи plaintext во временный файл. Перед публикацией проверяются `flush`, `fsync`/`_commit` и `close`. Публикация без перезаписи использует Linux `renameat2(RENAME_NOREPLACE)` с hard-link fallback либо Windows `MoveFileExW` без replace с hard-link fallback. На POSIX синхронизация каталога best-effort. При обычной обработке ошибки временный файл удаляется. При аварийном завершении временные файлы могут остаться; абсолютная долговечность после отключения питания не гарантируется.
+## Output behavior
 
-## Ошибки и ограничения
+Temporary output is created exclusively in the destination directory. Writes and finalization operations are checked; publication avoids replacing an existing target. Temporary cleanup is attempted on ordinary failure. Filesystem crash durability and orphan cleanup are not guaranteed universally.
 
-Операция должна завершиться ошибкой при неверном ключе, повреждении тега, неверном заголовке, неподдерживаемой версии/размере блока, недопустимых длинах/флагах, усечении и хвостовых байтах. Выходной путь не должен перезаписываться.
+## Compatibility and error handling
 
-Это не спецификация production-grade системы. См. [SECURITY.md](SECURITY.md) и [ROADMAP.md](ROADMAP.md) для незакрытых вопросов.
+The format version byte is `1`. Unknown versions, unsupported header parameters, malformed record framing, authentication failures, truncation and unexpected trailing data are errors. A future format revision must be versioned explicitly.
+
+## Related normative documents
+
+- [Container byte layout](FORMAT.md)
+- [Key encoding](KEY_FORMAT.md)
+- [Security assumptions and limitations](SECURITY.md)
+- [Test coverage](TESTING.md)

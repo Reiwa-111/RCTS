@@ -1,12 +1,13 @@
-# RCTS License
+# License status
 
-**Project license: Apache License 2.0.** The author selected this license.
 
-RCTS is licensed under Apache-2.0. The complete license text is in `LICENSE`.
-It permits use, modification, redistribution, and commercial use subject to its terms,
-including preservation of required notices. It includes an express patent grant and
-patent-termination provisions.
+## Project license
 
-OpenSSL is a separate dependency and remains under its own license. RCTS's license
-neither replaces nor changes OpenSSL's license. When distributing binaries, check and
-satisfy the licensing requirements of all bundled and distributed components.
+RCTS-authored code and documentation are licensed under Apache License 2.0. The canonical license text is in [`LICENSE`](LICENSE).
+
+## Third-party components
+
+- **OpenSSL 3.x Crypto:** linked dependency for cryptographic primitives. OpenSSL has its own license and notices; redistribution obligations depend on how the dependency is packaged.
+- **CMake, compiler and Python:** build/test tools are development dependencies and are not automatically shipped as part of the RCTS source release.
+
+This inventory is a project-maintenance note, not legal advice or a complete binary redistribution audit. Recheck dependency versions, license texts, notices and distribution form before publishing binaries.

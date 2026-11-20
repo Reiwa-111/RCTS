@@ -1,60 +1,169 @@
-# Архитектура текущей реализации
+# last updated: 0.3.0 | 2026-11-20 | IMPLEMENTATION OVERVIEW
 
-## Обзор
+# Архитектура RCTS 0.3.0
 
-Текущий прототип намеренно небольшой: одна точка входа CLI и реализация в `src/main.cpp`. Разделение на библиотеки/модули пока не выполнено. Не следует принимать будущую желаемую архитектуру за уже существующую.
+> Документ описывает код, существующий в текущем снимке. Он не является проектом будущей архитектуры.
 
-## Поток шифрования
+## 1. Область реализации
 
-1. Проверить через `symlink_status`, что выходной путь не существует (включая висячую символическую ссылку), и что входной файл является обычным файлом.
-2. Открыть входной файл и строго прочитать мастер-ключ ограниченного размера.
-3. Построить заголовок: magic, версия, размер блока, случайная соль и nonce-префикс.
-4. Получить 32-байтовый ключ контейнера через HKDF-SHA-256.
-5. Эксклюзивно создать короткий временный файл `.rcts.partial-*` в каталоге назначения (`O_CREAT | O_EXCL` на POSIX, `CreateFileW` с `CREATE_NEW` на Windows), не используя `exists()` перед открытием.
-6. Записать заголовок, затем блоки AES-256-GCM с уникальными в рамках контейнера nonce и AAD.
-7. Пометить последнюю запись флагом FINAL; пустой файл получает пустую финальную запись.
-8. Проверить `flush`, выполнить `fsync`/`_commit`, проверить `close`, затем опубликовать без перезаписи: Linux — `renameat2(RENAME_NOREPLACE)` с hard-link fallback; Windows — `MoveFileExW` без replace с hard-link fallback. На POSIX синхронизация каталога выполняется best-effort.
-9. При обычном исключении закрыть и удалить временный файл.
+RCTS — локальная CLI-программа. Основная реализация сосредоточена в `src/main.cpp`; отдельные криптографические и файловые подсистемы пока не выделены в самостоятельные модули. CMake формирует исполняемый файл и подключает тестовые цели. OpenSSL Crypto используется как внешний криптографический backend.
 
-## Поток расшифрования
+## 2. Слои потока данных
 
-1. Проверить путь назначения через `symlink_status` и потребовать обычный файл для контейнера.
-2. Прочитать 33-байтовый заголовок и проверить magic, версию, размер блока.
-3. Прочитать мастер-ключ и вывести ключ контейнера.
-4. Эксклюзивно создать временный файл в каталоге назначения.
-5. Последовательно проверить framing записи, вычислить nonce/AAD, проверить GCM tag.
-6. Только после успешной аутентификации конкретной записи записать её plaintext во временный файл.
-7. После FINAL проверить EOF, выполнить `flush`, `fsync`/`_commit`, проверить `close` и опубликовать результат no-clobber rename/link. На POSIX синхронизация каталога выполняется best-effort.
-8. При обычном исключении закрыть и удалить временный файл.
+```text
+CLI arguments
+    │
+    ├── keygen ── random bytes ── Unicode key encoding ── exclusive publication
+    │
+    ├── encrypt ── input validation ── header / salt / nonce prefix
+    │             │
+    │             └── HKDF ── per-container key
+    │                         │
+    │                         └── chunk loop ── AES-256-GCM + AAD + tag
+    │                                          │
+    │                                          └── temporary output ── sync/close ── no-clobber publish
+    │
+    └── decrypt ── header validation ── HKDF ── record parser
+                                          │
+                                          └── GCM authentication ── temporary plaintext
+                                                                       │
+                                                                       └── publish only after final validation
+```
 
-Важно: plaintext предыдущих записей существует во временном файле до проверки финальной записи. Он не публикуется под целевым именем до проверки всего контейнера, но аварийное завершение процесса или питания может оставить временный plaintext-файл. POSIX синхронизирует родительский каталог best-effort после публикации; абсолютная долговечность не гарантируется.
 
-## Основные функции
+## 3. Key generation
 
-| Функция | Назначение |
-|---|---|
-| `random_bytes` | CSPRNG через `RAND_bytes` |
-| `key_bytes_to_unicode` / `unicode_to_key_bytes` | кодирование и строгий разбор 32-байтового ключа |
-| `derive_file_key` | HKDF-SHA-256 |
-| `make_nonce` | 96-битный nonce из префикса и индекса |
-| `make_aad` | формирование аутентифицируемых метаданных |
-| `encrypt_gcm` / `decrypt_gcm` | операции AES-256-GCM через EVP |
-| `write_record` | framing и шифрование одной записи |
-| `encrypt_file` / `decrypt_file` | потоковые операции над файлами |
-| `path_entry_exists` / `require_regular_file` | проверка пути без следования висячим symlink и типа входного файла |
-| `open_exclusive_file` / `sync_output_file` | эксклюзивное создание, `flush` и `fsync`/`_commit` |
-| `AtomicOutput` | RAII-временный файл, проверяемое закрытие и no-clobber публикация |
-| `make_temp_path` / `commit_temp` | короткое временное имя и публикация результата |
-| `generate_key` | создание ключевого файла через тот же временный механизм |
-| `main` | разбор трёх CLI-команд |
+1. OpenSSL `RAND_bytes` supplies 32 random bytes.
+2. The byte sequence is represented as 32 Unicode code points in `U+4E00..U+4EFF`.
+3. The key is serialized as UTF-8 with the accepted line-ending convention.
+4. The destination is created without replacing an existing path.
+5. Local key buffers receive best-effort cleansing; this does not guarantee that all memory copies are erased.
 
-## Технические ограничения, видимые в коде
+The key file is a master key, not a password. There is no password derivation or user-selected secret in v0.1.
 
-- Временный файл создаётся эксклюзивно, поэтому гонка «проверить и открыть» для самого временного имени закрыта. Остаётся TOCTOU на уровне родительского каталога: враждебный локальный процесс с правом записи в каталог может подменять каталоги/ссылки, пока RCTS работает.
-- На POSIX новые файлы создаются с режимом `0600` напрямую, без изменения process-global `umask`. На Windows создаётся protected DACL: полный доступ текущему пользователю, SYSTEM и local Administrators; наследуемые ACE не расширяют доступ.
-- Публикация использует no-clobber rename, когда он доступен, и hard-link fallback. На файловых системах без подходящей операции публикации завершится ошибкой без перезаписи; hard-link fallback может быть недоступен на отдельных томах.
-- `flush` и `fsync`/`_commit` проверяются для данных файла. На POSIX синхронизация родительского каталога выполняется best-effort, её ошибки не приводят к отказу после публикации. Windows использует `MOVEFILE_WRITE_THROUGH`; отдельный portable directory-sync контракт не заявляется.
-- Нет явной очистки всех копий ключевого материала из памяти.
-- Весь код находится в одном translation unit; тестируется через CLI, а не через модульные интерфейсы.
+## 4. Encryption path
 
-Эти пункты являются задачами roadmap, а не утверждением, что текущая реализация уже закрывает соответствующие риски.
+- Validate input/output path conditions and input file type.
+- Read and validate the master-key file with a bounded read.
+- Generate container salt and nonce prefix with the OpenSSL CSPRNG.
+- Derive the 32-byte container key with HKDF-SHA-256.
+- Create a temporary output exclusively inside the destination directory.
+- Emit the fixed header and process input in 1 MiB chunks.
+- For each record, use AES-256-GCM and authenticate header plus record metadata through AAD.
+- Mark the final record; empty input has an empty final record.
+- Finalize, flush, synchronize, close and publish without overwriting the destination.
+- On ordinary failures, remove the temporary file where cleanup is possible.
+
+## 5. Decryption path
+
+- Validate the container as a regular file and read the fixed header.
+- Reject unsupported magic, version, chunk size or invalid framing.
+- Read the master key and derive the container key from header salt.
+- Parse records sequentially and reconstruct each nonce from prefix and index.
+- Authenticate each record before its plaintext is accepted for output.
+- Enforce lengths, flags, record order, FINAL placement and EOF rules.
+- Write to a private temporary file, finalize and publish only after full-container validation.
+- A malformed container or authentication failure must not produce a published final output.
+
+## 6. File publication
+
+The implementation uses exclusive temporary-file creation (`O_CREAT | O_EXCL` on POSIX; `CreateFileW` with `CREATE_NEW` on Windows). It checks write/finalization steps and attempts no-clobber publication. The documented publication path is rename-first with hard-link fallback, not a preflight `exists()` check followed by an unsafe open. POSIX directory synchronization is best-effort. Crash recovery is not guaranteed to remove every orphaned temporary file.
+
+## 7. Memory and concurrency
+
+Encryption and decryption are streaming and bounded by record-sized buffers rather than whole-file memory. The implementation has no documented parallel record processing. Buffer cleansing is best-effort and cannot prove that compiler, library, stack, register or OS copies have disappeared.
+
+## 8. Security boundary
+
+The project does not implement cryptographic primitives. Security still depends on correct OpenSSL use, nonce uniqueness, authenticated framing, key secrecy, filesystem semantics, build provenance, compiler correctness and host integrity. The current implementation is experimental and has not undergone independent cryptographic review.
+
+## 9. Architecture debt
+
+- Single translation unit: `src/main.cpp`.
+- No separate stable internal library/API.
+- Cross-platform filesystem behavior needs continued testing.
+- No independently audited secret-memory lifecycle.
+- No complete CI matrix or independent crypto review.
+
+See [ROADMAP](ROADMAP.md) for tracked engineering priorities.'@
+$files['docs/DEVELOPMENT.md']=@'
+# Разработка и сборка
+
+
+## Инструменты и версии
+
+- C++20 compiler (GCC, Clang or MSVC)
+- CMake 3.20 or newer
+- OpenSSL 3.x Crypto
+- Python 3.8+ for test drivers
+
+Exact supported compiler/platform combinations are not yet defined by a release CI matrix. A local successful build does not establish compatibility with every compiler or operating system.
+
+## Release build (Linux)
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+## MSYS2 UCRT64
+
+Install the UCRT64 GCC, CMake, OpenSSL and Python packages from MSYS2, then run:
+
+
+```sh
+cmake -S . -B build -G "MinGW Makefiles" -DOPENSSL_ROOT_DIR="C:/msys64/ucrt64"
+cmake --build build --parallel
+export PATH="/c/msys64/ucrt64/bin:$PATH"
+ctest --test-dir build --output-on-failure
+```
+
+The runtime DLL path must be available to the test runner. Missing DLLs are environment/build problems and should be distinguished from RCTS runtime failures.
+
+## Visual Studio
+
+```powershell
+cmake -S . -B build -A x64 -DCMAKE_PREFIX_PATH="C:/path/to/openssl"
+cmake --build build --config Release --parallel
+ctest --test-dir build -C Release --output-on-failure
+```
+
+## Special build configurations
+
+### Hardened build
+
+Use the project's CMake configuration and record the exact options in the test report. Never describe a build as hardened merely because its directory is named `build-hardened`.
+
+### Analyzer build
+
+Configure the analyzer target/options supported by the current CMake file. Preserve diagnostics and treat warnings as evidence to investigate, not as a complete correctness proof.
+
+### Fault-injection build
+
+```sh
+cmake -S . -B build-fault -DCMAKE_BUILD_TYPE=Debug -DRCTS_ENABLE_FAULT_INJECTION=ON
+cmake --build build-fault --parallel
+ctest --test-dir build-fault --output-on-failure
+```
+
+Fault-injection artifacts are test-only and must not be distributed as normal binaries.
+
+### Known-answer test (KAT)
+
+The deterministic KAT configuration is explicitly test-only. It uses a fixed test vector and deterministic entropy plumbing for reproducibility. Do not ship or use the KAT binary for real encryption.
+
+## Development workflow
+
+1. Start from a clean working tree or record every pre-existing change.
+2. Read the architecture, format, security and test documents relevant to the task.
+3. Make the smallest focused change that preserves format compatibility unless a format change is explicitly planned.
+4. Build the affected configuration.
+5. Run focused tests, then the applicable full test suite.
+6. Capture exact command, exit code, tool versions, commit and log.
+7. Review `git diff --check` and inspect the final diff.
+8. Update documentation and internal handoff/evidence in the same change.
+
+## Evidence discipline
+
+A test is PASS only when its output/exit status was captured for the current code. A previously reported result must be labeled historical. A test that could not be run is NOT RUN; a test whose output was lost is UNVERIFIED, not PASS.

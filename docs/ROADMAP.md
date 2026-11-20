@@ -1,132 +1,47 @@
-# Дорожная карта RCTS до 1.0
+# last updated: 0.3.0 | 2026-11-20 | ROADMAP REVIEW
 
-**Правило:** номера версий — ориентиры этапов, а не обещание календарных дат. Выпуск разрешён только после выполнения критериев приёмки. Криптографический дизайн не следует расширять ради количества функций.
+# RCTS roadmap
 
-## Принципы 1.0
 
-1. Формат должен быть опубликован и однозначно описан.
-2. Совместимость должна быть предсказуемой: старые контейнеры либо читаются, либо мигрируются отдельным инструментом.
-3. Файловые операции должны быть устойчивы к обычным ошибкам и безопасно обрабатывать конкуренцию за пути.
-4. Ключевой материал не должен попадать в логи, диагностические сообщения или репозиторий.
-5. Должны существовать автоматические regression-, negative- и fuzz-тесты.
-6. Необходим независимый анализ криптографического дизайна и реализации.
-7. Поддерживаемые ОС, компиляторы и версии OpenSSL должны быть названы явно.
+Roadmap versions are engineering milestones, not calendar promises. The container format must not change silently; any incompatible change requires an explicit versioned format design and migration story.
 
-## 0.3.0 — исследовательская основа приложения (формат v0.1)
+## Current baseline: application 0.3.0 / container v0.1
 
-- [x] C++20 CLI: `keygen`, `encrypt`, `decrypt`.
-- [x] 32-байтовый случайный мастер-ключ и его 32-символьное Unicode-представление.
-- [x] HKDF-SHA-256 и AES-256-GCM.
-- [x] Потоковые записи по 1 MiB, AAD и проверка тегов.
-- [x] Описание формата v0.1.
-- [x] Базовые black-box regression-тесты включены в репозиторий.
-- [ ] Независимый аудит и поддержка production — не заявлены.
+- [x] CLI keygen/encrypt/decrypt baseline.
+- [x] OpenSSL-backed HKDF-SHA-256 and AES-256-GCM.
+- [x] Fixed header, record framing, AAD and final-record rules documented.
+- [x] Streaming implementation and bounded key parsing.
+- [x] Exclusive temporary file creation and no-clobber publication path.
+- [x] Smoke test coverage and public compatibility vector.
+- [x] Fault-injection hooks and test driver (coverage remains bounded).
 
-## v0.2.0 — воспроизводимая база и корректность
+## Before a 1.0 decision
 
-Цель: сделать поведение проверяемым и убрать противоречия между реализацией, тестами и документацией.
+### Reliability
+- [ ] Capture reproducible Release, Hardened and Analyzer test logs for the exact candidate commit.
+- [ ] Complete cross-platform tests for output-path race behavior and symlink edge cases.
+- [ ] Expand disk-full, short-write, sync, close and publication fault coverage.
+- [ ] Review cleanup behavior after normal errors and abrupt termination.
+- [ ] Define supported OS/compiler/OpenSSL combinations and verify them in CI.
 
-- [ ] CI для Linux/GCC и Linux/Clang.
-- [ ] CI Windows/MSVC; проверить OpenSSL 3.x и CTest.
-- [ ] Добавить тесты максимального числа записей без обязательного выделения 64 GiB (тестовые seam/mock или отдельные parser tests).
-- [x] Проверить обработку EOF, ошибок чтения, записи, `flush` и `close` (проверки добавлены; fault injection для `fsync`/`close` ещё не выполнен).
-- [x] Ввести единый формат сообщений об ошибках и стабильные exit codes, не выдавая лишнюю информацию (0 — успех, 1 — ошибка операции, 2 — неверное использование; префикс `rcts: error:`).
-- [x] Проверить сборку с максимальными предупреждениями; разобрать предупреждения, не отключать их без причины (Release с `-Werror` проходит).
-- [x] Перепроверить GCC `-fanalyzer` на текущем снимке (GCC 16.2.0: 0 диагностик; исторические предупреждения GCC 14.2 не воспроизводились — нужен повтор в CI на старом toolchain).
-- [x] Проверить корректность установки бинарного файла (локальный CMake install staging test; CI/package matrix ещё отсутствует).
+### Security assurance
+- [ ] Independent review of nonce construction, HKDF parameters, AAD, record framing and GCM usage.
+- [ ] Review all secret-bearing buffers, copies, stack lifetime and cleansing claims.
+- [ ] Fuzz header/record parser and key decoder.
+- [ ] Property-based tests for framing, round-trip, rejection and no-output-on-failure.
+- [ ] Document residual risks and response process for vulnerabilities.
 
-**Критерий выхода:** CI зелёный на Linux и Windows; тесты соответствуют фактическому поведению; README собирается по чистым инструкциям. Критерий пока не выполнен: CI отсутствует.
+### Release engineering
+- [ ] CI builds/tests at least the declared supported configurations.
+- [ ] Clean-clone reproducibility check.
+- [ ] Checksum manifest generation and verification from repository root.
+- [ ] License inventory for source and shipped runtime dependencies.
+- [ ] Release checklist with captured evidence and review.
 
-## v0.3.0 — файловый I/O и аварийные сценарии
+## Later, only after the baseline is stable
 
-Цель: укрепить создание временных файлов и публикацию результата.
+Potential future work is not committed scope: safer key UX, an explicit recovery/migration tool, container metadata options, and modularization of the current translation unit. Each feature requires threat-model review and format/API compatibility analysis before implementation.
 
-- [x] Заменить `exists()` + обычный `ofstream` на безопасное эксклюзивное создание temp-файла с проверенными платформенными примитивами (`O_EXCL` / `_O_EXCL`, короткое имя в каталоге назначения).
-- [x] Обеспечить права доступа к временным файлам и ключам отдельно для POSIX и Windows (POSIX: `0600`; Windows: protected DACL для текущего пользователя, SYSTEM и Administrators).
-- [x] No-clobber publication: Linux `renameat2(RENAME_NOREPLACE)` and Windows `MoveFileExW` without replace, with hard-link fallback. Unsupported paths fail safely.
-- [x] Проверять ошибки закрытия и синхронизации данных; документировать гарантии долговечности (`flush` + `fsync`/`_commit` + `close`; POSIX parent-directory sync best-effort).
-- [x] Исключить symlink/TOCTOU-атаки в пределах заявленной модели угроз (для временного имени; TOCTOU родительского каталога остаётся вне модели и задокументирован).
-- [x] Проверить очистку временных файлов при обычных ошибках и описать остаточные риски при аварийном завершении (smoke/fault tests проверяют `.rcts.partial-*`; crash-остатки задокументированы).
+## Exit criteria
 
-**Критерий выхода:** автоматические тесты конкурентных путей и failure injection проходят на каждой поддерживаемой ОС. Локальные concurrent/fault tests прошли на Windows/MSYS2 UCRT64. Межплатформенный критерий не закрыт: Linux/macOS и MSVC не проверены; CI отсутствует.
-
-## v0.4.0 — ключевой материал и удобство CLI
-
-Цель: чётко зафиксировать жизненный цикл ключа и снизить риск случайной утечки.
-
-- [x] Добавить best-effort очистку локальных секретных буферов через `OPENSSL_cleanse`; полное стирание копий runtime/compiler не гарантируется.
-- [ ] Проверить обработку прав ключевого файла и сообщения об ошибках.
-- [ ] Спроектировать резервное копирование/проверку ключа в документации, без скрытой эскроу-функции.
-- [ ] Уточнить политику stdout/stderr, exit codes, help/version и обработку Unicode-путей.
-- [ ] Рассмотреть безопасную интерактивную интеграцию только при наличии реального сценария.
-
-**Критерий выхода:** documented key lifecycle; тесты не могут найти ключевые байты в логах; ограничения очистки памяти описаны честно.
-
-## v0.5.0 — спецификация и решение о следующей версии формата
-
-Цель: не добавлять несовместимые функции незаметно.
-
-- [ ] Зафиксировать v0.1 test vectors: header, KDF input/output, nonce, AAD и пример контейнера.
-- [ ] Написать независимый parser/reader для проверки test vectors.
-- [ ] Оценить необходимость padding/сокрытия размера как отдельное свойство конфиденциальности метаданных.
-- [ ] Оценить необходимость заголовка с параметрами KDF, идентификатором алгоритма и расширениями.
-- [ ] Решить, нужен ли формат v0.2/format version 2; описать миграцию до реализации.
-- [ ] Не менять `Version=1` и существующую семантику v0.1.
-
-**Критерий выхода:** документированное решение «оставить формат без изменений» или новая спецификация со threat model, тест-векторами и стратегией совместимости.
-
-## v0.6.0 — тестирование парсера и fuzzing
-
-- [ ] Fuzz target для заголовка/парсера записей.
-- [ ] Fuzz target для декодера ключа UTF-8.
-- [ ] Corpus из минимального, пустого, многоблочного, повреждённого и граничного контейнера.
-- [ ] Sanitizer CI для fuzz targets.
-- [ ] Ограничения на размеры выделений до аллокации, устойчивость к мусорным длинам.
-- [ ] Regression corpus для каждого найденного бага.
-
-**Критерий выхода:** длительность/покрытие fuzzing указаны; найденные сбои исправлены и закреплены регрессионными тестами.
-
-## v0.7.0 — производительность и структура кода
-
-- [ ] Разделить crypto/format/io/cli только после стабилизации тестовой базы.
-- [ ] Добавить измерения throughput и peak RSS на нескольких размерах файлов.
-- [ ] Проверить влияние размера блока; любое изменение требует изменения формата или параметров с версионированием.
-- [ ] Не добавлять многопоточность без доказанной необходимости и строгого плана nonce/index scheduling.
-- [ ] Поддерживать потоковую обработку и ограниченное использование памяти.
-
-**Критерий выхода:** модульный код сохраняет все golden vectors и regression tests; результаты benchmark воспроизводимы.
-
-## v0.8.0 — независимый аудит и исправления
-
-- [ ] Подготовить краткий криптографический design document и threat model для внешнего рецензента.
-- [ ] Провести независимый review KDF, nonce discipline, AAD, framing, GCM usage и файловой логики.
-- [ ] Отдельно провести code review C++/OpenSSL и платформенных файловых операций.
-- [ ] Исправить замечания; критические изменения требуют новых тест-векторов и повторного review.
-- [ ] Если независимого аудита нет, честно перенести 1.0, а не объявлять прототип проверенным.
-
-## v0.9.0 — Release Candidate
-
-- [ ] Зафиксировать спецификацию и поддерживаемые платформы.
-- [ ] Выполнить полный regression/fuzz/sanitizer/CI цикл.
-- [ ] Подготовить миграционную документацию и release notes.
-- [ ] Проверить чистую сборку архива из исходников.
-- [ ] Заморозить функциональность; только исправления блокирующих ошибок.
-- [ ] Провести финальный review документации, лицензии и сторонних зависимостей.
-
-## v1.0.0 — стабильный выпуск
-
-Выпускать только если выполнено всё:
-
-- [ ] Спецификация и test vectors заморожены.
-- [ ] Критические/высокие замечания аудита закрыты или формально приняты с объяснением.
-- [ ] Поддерживаемые ОС проходят CI и release build.
-- [ ] Парсер прошёл fuzzing и regression corpus; нет известных необработанных crash/UB.
-- [ ] Безопасное создание и публикация файлов подтверждены платформенными тестами.
-- [ ] Указаны гарантии и ограничения защиты, включая утечки метаданных и поведение при сбоях.
-- [ ] Зафиксирована лицензия и список зависимостей.
-- [ ] Есть инструкция установки, восстановления, резервного копирования ключа и миграции.
-- [ ] Есть план поддержки и обработки security reports.
-
-## Отдельная исследовательская ветка (не блокирует и не усиливает криптоядро автоматически)
-
-Можно отдельно исследовать обратимые представительные преобразования или padding, но только как эксперименты. Перестановки байтов, реверсы битов, «случайные инструкции», dummy-данные и усложнение структуры сами по себе не повышают стойкость AES-GCM. Не смешивать такую ветку с основной реализацией до отдельного дизайна и review.
+A milestone is complete only when code, tests, documentation and release evidence agree. A checked box requires a verified commit and captured evidence; historical or missing output does not qualify.

@@ -1,8 +1,6 @@
 /build/
 /build-*/
-docs/AI_HANDOFF.md
-docs/EXTERNAL_REVIEW_QWEN.md
-docs/QA_REPORT.md
+
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
